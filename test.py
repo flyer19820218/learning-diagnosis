@@ -10,7 +10,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 與 API) ---
+# --- 2. 核心設定 (CSS) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -29,12 +29,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-else:
-    st.error("🚨 請在 Secrets 設定 GEMINI_API_KEY")
-    st.stop()
-
+# 鎖定最新 2.5-flash 模型
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
@@ -57,7 +52,7 @@ DIFFICULTY_LEVELS = {
 }
 
 FALLBACK_QUIZ = [
-    {"topic": "系統防護", "q": "目前 API 額度過載，這是備用靜態題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
+    {"topic": "系統防護", "q": "目前 API 額度過載或金鑰無效，這是備用靜態題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
 
 # ==========================================
@@ -81,26 +76,33 @@ SEASON_1_DB = load_local_db()
 # ==========================================
 # --- 5. 狀態管理初始化 ---
 # ==========================================
+if "user_api_key" not in st.session_state: st.session_state.user_api_key = ""
 if "app_phase" not in st.session_state: st.session_state.app_phase = "login"
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = []
 if "user_ans" not in st.session_state: st.session_state.user_ans = {}
 if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
 if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
 if "current_episode" not in st.session_state: 
-    # 防呆設計：若 JSON 為空，給予預設值
     keys = list(SEASON_1_DB.keys())
     st.session_state.current_episode = keys[0] if keys else "尚未載入賽程"
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1: 春訓營 (基礎記憶)"
+
+# 註冊使用者的 API Key (確保在呼叫 API 前生效)
+if st.session_state.user_api_key:
+    genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
 # --- 6. AI 出題引擎 ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key):
+    # 若無金鑰，直接阻擋
+    if not st.session_state.user_api_key:
+        return FALLBACK_QUIZ
+        
     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
     
-    # 修改：要求生成 10 題
     prompt = f"""
     請根據以下教材，生成 10 題單選題。
     【測驗單元】：{episode_name}
@@ -119,17 +121,30 @@ def get_quiz_data(episode_name, difficulty_key):
         return FALLBACK_QUIZ
 
 # ==========================================
-# --- 7. [介面路由] 登入頁面 ---
+# --- 7. [介面路由] 登入頁面 (BYOK 模式) ---
 # ==========================================
 if st.session_state.app_phase == "login":
     st.write("<br><br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<h1 style='text-align: center;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #6c757d;'>請登入以進入球員休息室</p><br>", unsafe_allow_html=True)
-        if st.button("🌐 授權登入", use_container_width=True):
-            st.session_state.app_phase = "lobby" 
-            st.rerun()
+        st.markdown("<div class='season-card'>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #6c757d;'>自備裝備 (BYOK)，進入球員休息室</p>", unsafe_allow_html=True)
+        st.write("---")
+        
+        # 讓使用者輸入自己的 API Key
+        api_input = st.text_input("🔑 請輸入你的 Gemini API 金鑰", type="password", placeholder="請輸入以 AIza 開頭的金鑰...")
+        st.caption("💡 [點此前往 Google AI Studio 申請免費金鑰](https://aistudio.google.com/app/apikey) (每天享免費 20 次額度)")
+        
+        st.write("<br>", unsafe_allow_html=True)
+        if st.button("🌐 授權綁定並登入", use_container_width=True):
+            if api_input.strip():
+                st.session_state.user_api_key = api_input.strip()
+                st.session_state.app_phase = "lobby" 
+                st.rerun()
+            else:
+                st.error("🚨 必須輸入 API 金鑰才能上場打擊喔！")
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # --- 8. [介面路由] 賽季大廳 ---
@@ -140,6 +155,7 @@ elif st.session_state.app_phase == "lobby":
     
     with col_m:
         st.markdown("<h2 style='text-align: center;'>🏟️ 選擇你的賽事</h2>", unsafe_allow_html=True)
+        st.success("✅ API 金鑰已成功載入！就緒完畢。")
         st.write("---")
         
         selected_ep = st.selectbox("📌 選擇賽事局數 (第一季)", list(SEASON_1_DB.keys()))
@@ -153,16 +169,18 @@ elif st.session_state.app_phase == "lobby":
             st.session_state.user_ans = {}
             st.session_state.app_phase = "quiz"
             st.rerun()
+            
+        if st.button("🔌 登出並清除金鑰", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
 
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
 # ==========================================
 elif st.session_state.app_phase == "quiz":
     ep_name = st.session_state.current_episode
-    # 直接使用完整的難度名稱，不再用 split 切割
     diff_name = st.session_state.current_difficulty 
     
-    # 標題會顯示如： ✍️ 1局下半：電解質大聯盟 [Level 3-素養思考]
     st.markdown(f"## ✍️ {ep_name} [{diff_name}]")
     st.write("---")
     col_l, col_r = st.columns([1, 1.5], gap="large")
@@ -187,6 +205,7 @@ elif st.session_state.app_phase == "quiz":
                 if st.form_submit_button("🏁 揮棒！(提交看分析)"):
                     st.session_state.app_phase = "dashboard"
                     st.rerun()
+
 # ==========================================
 # --- 10. [介面路由] 學習儀表板與下載 ---
 # ==========================================
@@ -253,8 +272,8 @@ elif st.session_state.app_phase == "dashboard":
                 try:
                     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
                     st.session_state.ai_analysis = model.generate_content(f"學生得 {correct_count}/{total_q}。錯題：{mistakes_for_ai}。請用棒球教練熱血口吻寫分析。").text
-                except Exception:
-                    st.session_state.ai_analysis = "⚠️ API 額度耗盡。表現不錯，回去多練揮棒！"
+                except Exception as e:
+                    st.session_state.ai_analysis = f"⚠️ API 無效或額度耗盡 ({e})。請確認你的金鑰！"
         if st.session_state.ai_analysis: st.markdown(f"<div class='ai-box'>{st.session_state.ai_analysis}</div>", unsafe_allow_html=True)
 
         st.markdown("""<div class="nl-action-card"><div class="nl-action-icon" style="background-color: #1d3324;">📖</div><div class="nl-action-text"><h4>特訓菜單 (指南)</h4></div></div>""", unsafe_allow_html=True)
@@ -264,8 +283,8 @@ elif st.session_state.app_phase == "dashboard":
                     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
                     current_content = SEASON_1_DB.get(st.session_state.current_episode, "")
                     st.session_state.ai_guide = model.generate_content(f"根據教材：{current_content}，寫出3點特訓指南。").text
-                except Exception:
-                    st.session_state.ai_guide = "⚠️ API 額度耗盡。請熟讀教材基本觀念。"
+                except Exception as e:
+                    st.session_state.ai_guide = f"⚠️ API 無效或額度耗盡 ({e})。請確認你的金鑰！"
         if st.session_state.ai_guide: st.markdown(f"<div class='ai-box'>{st.session_state.ai_guide}</div>", unsafe_allow_html=True)
             
         st.write("---")
