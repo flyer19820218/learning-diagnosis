@@ -25,8 +25,6 @@ st.markdown("""
     .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
     .ai-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
-    
-    /* 隱私聲明樣式 */
     .confidential-note { color: #d93025; font-weight: 600; border: 1px solid #d93025; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
@@ -34,7 +32,7 @@ st.markdown("""
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
-# --- 3. 系統提示詞設定 (大聯盟規範) ---
+# --- 3. 系統提示詞設定 ---
 # ==========================================
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
@@ -55,7 +53,7 @@ FALLBACK_QUIZ = [
 ]
 
 # ==========================================
-# --- 4. 動態載入資料庫 (讀取 JSON) ---
+# --- 4. 動態載入資料庫 ---
 # ==========================================
 @st.cache_data 
 def load_local_db():
@@ -76,7 +74,8 @@ SEASON_1_DB = load_local_db()
 # --- 5. 狀態管理初始化 ---
 # ==========================================
 if "user_api_key" not in st.session_state: st.session_state.user_api_key = ""
-if "student_profile" not in st.session_state: st.session_state.student_profile = {}
+if "student_profile" not in st.session_state: 
+    st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": "01", "name": ""}
 if "app_phase" not in st.session_state: st.session_state.app_phase = "login"
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = []
 if "user_ans" not in st.session_state: st.session_state.user_ans = {}
@@ -106,7 +105,7 @@ def get_quiz_data(episode_name, difficulty_key):
     except Exception: return FALLBACK_QUIZ
 
 # ==========================================
-# --- 7. [介面路由] 登入頁面 (機密版 + API申請連結) ---
+# --- 7. [介面路由] 登入頁面 ---
 # ==========================================
 if st.session_state.app_phase == "login":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -116,25 +115,19 @@ if st.session_state.app_phase == "login":
         st.markdown("<p style='text-align: center; color: #6c757d;'>國中專屬．專業學習診斷系統</p>", unsafe_allow_html=True)
         st.write("---")
         
-        # 關鍵隱私聲明
         st.markdown("<div class='confidential-note'>🔒 學習診斷內容僅供老師了解學習狀況，全屬機密，請放心作答。</div>", unsafe_allow_html=True)
         
         st.markdown("#### 👤 球員基本資料")
         c_grade, c_class, c_seat = st.columns(3)
-        with c_grade:
-            grade = st.selectbox("年級", ["國七", "國八", "國九"]) # 移除了高中選項
-        with c_class:
-            cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
-        with c_seat:
-            seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
+        with c_grade: grade = st.selectbox("年級", ["國七", "國八", "國九"])
+        with c_class: cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
+        with c_seat: seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
             
         student_name = st.text_input("姓名 (選填，可填寫藝名或暱稱)", placeholder="如果不填姓名，將以座號顯示")
         
         st.write("<br>", unsafe_allow_html=True)
         st.markdown("#### 🔑 裝備驗證 (API 金鑰)")
         api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="請輸入以 AIza 開頭的金鑰...")
-        
-        # 💡 把你千叮嚀萬交代的重要連結補回來啦！
         st.caption("💡 新球員？ [點此前往 Google AI Studio 申請免費金鑰](https://aistudio.google.com/app/apikey) (每天享免費 20 次額度)")
         st.write("<br>", unsafe_allow_html=True)
         
@@ -147,7 +140,7 @@ if st.session_state.app_phase == "login":
             else: st.error("🚨 必須輸入 API 金鑰！")
 
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 ---
+# --- 8. [介面路由] 賽季大廳 (加入修改功能) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -158,13 +151,42 @@ elif st.session_state.app_phase == "lobby":
     with col_m:
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name} 回到休息室</h2>", unsafe_allow_html=True)
         st.write("---")
+        
+        # --- 新增：球員設定修改區 ---
+        with st.expander("⚙️ 球員檔案與裝備管理 (點此修改資料)"):
+            st.write("如果你剛才選錯了班級座號，可以在這裡修正：")
+            
+            # 準備下拉選單的清單與預設索引
+            grades = ["國七", "國八", "國九"]
+            classes = [f"{i}班" for i in range(1, 21)]
+            seats = [str(i).zfill(2) for i in range(1, 51)]
+            
+            c_g, c_c, c_s = st.columns(3)
+            with c_g: new_grade = st.selectbox("修改年級", grades, index=grades.index(profile['grade']))
+            with c_c: new_cls = st.selectbox("修改班級", classes, index=classes.index(profile['class']))
+            with c_s: new_seat = st.selectbox("修改座號", seats, index=seats.index(profile['seat']))
+            new_name = st.text_input("修改姓名", value=profile['name'])
+            
+            if st.button("💾 儲存修改資料"):
+                st.session_state.student_profile = {"grade": new_grade, "class": new_cls, "seat": new_seat, "name": new_name}
+                st.success("✅ 球員資料已更新！")
+                st.rerun()
+        # -----------------------------
+
+        st.write("<br>", unsafe_allow_html=True)
         selected_ep = st.selectbox("📌 選擇賽事單元", list(SEASON_1_DB.keys()))
         selected_diff = st.radio("🔥 選擇挑戰難度", list(DIFFICULTY_LEVELS.keys()))
-        if st.button("⚾ Play Ball!", use_container_width=True):
+        
+        st.write("<br>", unsafe_allow_html=True)
+        if st.button("⚾ Play Ball! (開始測驗)", use_container_width=True):
             st.session_state.current_episode = selected_ep
             st.session_state.current_difficulty = selected_diff
             st.session_state.quiz_data = [] 
             st.session_state.app_phase = "quiz"
+            st.rerun()
+            
+        if st.button("🔌 登出並清除金鑰", use_container_width=True):
+            st.session_state.clear()
             st.rerun()
 
 # ==========================================
@@ -205,7 +227,6 @@ elif st.session_state.app_phase == "dashboard":
     profile = st.session_state.student_profile
     player_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
     
-    # 戰報內容加入隱私標籤
     report_text = f"【化學大聯盟 - 極機密診斷戰報】\n球員：{player_name}\n(本內容僅供老師教學參考)\n單元：{st.session_state.current_episode}\n得分：{correct_count}/{total_q}\n\n"
 
     for i, q in enumerate(st.session_state.quiz_data):
