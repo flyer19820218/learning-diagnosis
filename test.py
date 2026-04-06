@@ -11,7 +11,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 防爆框) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -32,15 +32,19 @@ st.markdown("""
     .analysis-text h4 { margin: 0; color: #1e293b; }
     .analysis-text p { margin: 0; color: #64748b; font-size: 14px; }
     
-    /* 復刻 Image 10 下方學習卡片 */
-    .learning-card { background-color: #f8fafc; padding: 20px; border-radius: 12px; height: 180px;}
+    /* ✨ 復刻 Image 10 下方學習卡片 (修復爆框問題) */
+    .learning-card { 
+        background-color: #f8fafc; 
+        padding: 20px; 
+        border-radius: 12px; 
+        min-height: 180px; /* 改成最小高度 */
+        height: auto;      /* 讓內容自動撐開高度 */
+        margin-bottom: 20px; /* 和下方區塊保持距離 */
+    }
     .learning-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .learning-card-icon { background-color: #1e293b; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;}
     .learning-card-header b { font-size: 16px; color: #1e293b;}
     .learning-card-content { font-size: 13px; color: #475569; line-height: 1.6;}
-    
-    /* 復刻 Image 10 的 AI 解析結果區塊 */
-    .ai-result-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 20px; border-radius: 0 15px 15px 0; min-height: 200px; margin-bottom: 16px; }
     
     /* 視覺基礎 */
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
