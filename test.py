@@ -40,7 +40,7 @@ else:
     st.stop()
 
 # 模型設定：1.5 Flash 對免費版金鑰最友善且穩定
-MODEL_ID = "gemini-1.5-flash"
+MODEL_ID = "gemini-2.5-flash"
 
 # --- 3. 核心教材內容 ---
 course_content = """
