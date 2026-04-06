@@ -51,9 +51,9 @@ SYSTEM_INSTRUCTION = """
 """
 
 DIFFICULTY_LEVELS = {
-    "Level 1: 春訓營 (基礎記憶)": "基礎觀念題，直接測驗定義與名詞解釋，不需要複雜計算。",
-    "Level 2: 例行賽 (觀念應用)": "進階應用題，需要結合兩個以上的觀念，或是判斷常見的陷阱題。",
-    "Level 3: 季後賽 (素養推論)": "生活素養與實驗推論題，請設計情境（例如實驗室調配溶液），需要學生進行邏輯推導。"
+    "Level 1-基礎記憶": "基礎觀念題，直接測驗定義與名詞解釋，不需要複雜計算。",
+    "Level 2-觀念應用": "進階應用題，需要結合兩個以上的觀念，或是判斷常見的陷阱題。",
+    "Level 3-素養思考": "生活素養與實驗推論題，請設計情境（例如實驗室調配溶液），需要學生進行邏輯推導。"
 }
 
 FALLBACK_QUIZ = [
@@ -139,8 +139,7 @@ elif st.session_state.app_phase == "lobby":
     col_l, col_m, col_r = st.columns([1, 2, 1])
     
     with col_m:
-        st.markdown("<div class='season-card'>", unsafe_allow_html=True)
-        st.markdown("<h2>🏟️ 選擇你的賽事</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🏟️ 選擇你的賽事</h2>", unsafe_allow_html=True)
         st.write("---")
         
         selected_ep = st.selectbox("📌 選擇賽事局數 (第一季)", list(SEASON_1_DB.keys()))
@@ -154,22 +153,22 @@ elif st.session_state.app_phase == "lobby":
             st.session_state.user_ans = {}
             st.session_state.app_phase = "quiz"
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
 # ==========================================
 elif st.session_state.app_phase == "quiz":
     ep_name = st.session_state.current_episode
-    diff_name = st.session_state.current_difficulty.split(":")[0] 
+    # 直接使用完整的難度名稱，不再用 split 切割
+    diff_name = st.session_state.current_difficulty 
     
-    st.markdown(f"## ✍️ {ep_name} [{diff_name} 難度]")
+    # 標題會顯示如： ✍️ 1局下半：電解質大聯盟 [Level 3-素養思考]
+    st.markdown(f"## ✍️ {ep_name} [{diff_name}]")
     st.write("---")
     col_l, col_r = st.columns([1, 1.5], gap="large")
 
     with col_l:
         st.info("📖 戰術板 (講義複習)") 
-        # 使用 Markdown 渲染 JSON 中的內容
         st.markdown(SEASON_1_DB.get(ep_name, "讀取失敗"))
 
     with col_r:
@@ -188,7 +187,6 @@ elif st.session_state.app_phase == "quiz":
                 if st.form_submit_button("🏁 揮棒！(提交看分析)"):
                     st.session_state.app_phase = "dashboard"
                     st.rerun()
-
 # ==========================================
 # --- 10. [介面路由] 學習儀表板與下載 ---
 # ==========================================
