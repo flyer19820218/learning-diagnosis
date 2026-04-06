@@ -32,7 +32,7 @@ st.markdown("""
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
-# --- 3. 系統提示詞設定 (大聯盟規範 + 防幻覺封印) ---
+# --- 3. 系統提示詞設定 (防幻覺封印版) ---
 # ==========================================
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
@@ -40,9 +40,7 @@ SYSTEM_INSTRUCTION = """
 2. 【視覺排版規範】：文字顯示必須使用 Markdown 語法排版。化學式請務必使用標準符號（如 $H_2SO_4$）。
 3. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
 4. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
-5. 🚨【科學嚴謹性防護（極重要）】：扮演棒球教練時，棒球術語僅限於「語氣鼓勵」、「開場白」與「流程引導」（如：揮棒、安打、上場）。
-   **絕對禁止**將化學專有名詞強行比喻為棒球術語（例如：嚴禁將打擊率比喻為濃度，嚴禁將全壘打比喻為化學反應）。
-   在解釋化學觀念與診斷錯誤時，必須 100% 保持理化老師的科學嚴謹與準確性，不可使用牽強的譬喻。
+5. 🚨【科學嚴謹性防護（極重要）】：扮演棒球教練時，棒球術語僅限於「語氣鼓勵」、「開場白」與「流程引導」。絕對禁止將化學專有名詞強行比喻為棒球術語（例如嚴禁將打擊率比喻為濃度）。解釋化學觀念時必須 100% 保持理化老師的科學嚴謹與準確性。
 """
 
 DIFFICULTY_LEVELS = {
@@ -51,13 +49,12 @@ DIFFICULTY_LEVELS = {
     "Level 3-素養思考": "生活素養與實驗推論題，需要邏輯推導。"
 }
 
-
 FALLBACK_QUIZ = [
     {"topic": "系統防護", "q": "目前 API 額度過載，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
 
 # ==========================================
-# --- 4. 動態載入資料庫 & ✨自動多版本題庫池 ---
+# --- 4. 動態載入資料庫 & 自動多版本題庫池 ---
 # ==========================================
 os.makedirs("data", exist_ok=True)
 QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
@@ -98,7 +95,6 @@ if "user_ans" not in st.session_state: st.session_state.user_ans = {}
 if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
 if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
 
-# ✨ 新增：自動追蹤球員在各單元的「挑戰次數」
 if "attempt_tracker" not in st.session_state: st.session_state.attempt_tracker = {}
 if "current_episode" not in st.session_state: st.session_state.current_episode = list(SEASON_1_DB.keys())[0] if SEASON_1_DB else ""
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
@@ -108,12 +104,11 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. ✨ AI 出題引擎 (自動版控機制) ---
+# --- 6. AI 出題引擎 (自動版控機制) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
     
-    # 快取鍵值加入「第幾次挑戰 (vX)」，例如: 第1集_Level1_v2
     cache_key = f"{episode_name}_{difficulty_key}_v{attempt_num}"
     pool = load_quiz_pool()
     
@@ -126,7 +121,6 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
     
-    # 提示詞中要求避開重複題目
     prompt = f"生成 10 題單選題。單元：{episode_name}。難度：{diff_prompt}。教材：{course_content}。這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。格式：JSON 陣列。"
     
     try:
@@ -141,9 +135,7 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
         return FALLBACK_QUIZ
     except Exception: return FALLBACK_QUIZ
 
-# ==========================================
-# --- 二合一教練分析引擎 ---
-# ==========================================
+# 二合一教練分析引擎
 def get_ai_report(player_name, score, mistakes, content):
     if not st.session_state.user_api_key: return "API金鑰無效", "請檢查金鑰"
     try:
@@ -174,7 +166,7 @@ if st.session_state.app_phase == "checkin":
         
         st.write("<br>", unsafe_allow_html=True)
         st.markdown("#### 🔑 第二步：出示裝備通行證")
-        api_input = st.text_input("輸入 Gemini API 金鑰", type="password")
+        api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...")
         
         if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
             if api_input.strip():
@@ -185,7 +177,7 @@ if st.session_state.app_phase == "checkin":
             else: st.error("🚨 必須輸入 API 金鑰！")
 
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 ---
+# --- 8. [介面路由] 賽季大廳 (補回修改按鈕！) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -197,12 +189,30 @@ elif st.session_state.app_phase == "lobby":
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
+        # 🛡️ 把遺失的修改按鈕補回來了！
+        with st.expander("⚙️ 報到資料修改 (點此修正班級座號)"):
+            st.write("如果剛才選錯了班級座號，可以在這裡修正：")
+            grades = ["國七", "國八", "國九"]
+            classes = [f"{i}班" for i in range(1, 21)]
+            seats = [str(i).zfill(2) for i in range(1, 51)]
+            
+            c_g, c_c, c_s = st.columns(3)
+            with c_g: new_grade = st.selectbox("修改年級", grades, index=grades.index(profile['grade']))
+            with c_c: new_cls = st.selectbox("修改班級", classes, index=classes.index(profile['class']))
+            with c_s: new_seat = st.selectbox("修改座號", seats, index=seats.index(profile['seat']))
+            new_name = st.text_input("修改姓名", value=profile['name'])
+            
+            if st.button("💾 儲存修改資料"):
+                st.session_state.student_profile = {"grade": new_grade, "class": new_cls, "seat": new_seat, "name": new_name}
+                st.success("✅ 報到資料已更新！")
+                st.rerun()
+        
+        st.write("<br>", unsafe_allow_html=True)
         selected_ep = st.selectbox("📌 選擇賽事單元", list(SEASON_1_DB.keys()))
         selected_diff = st.radio("🔥 選擇挑戰難度", list(DIFFICULTY_LEVELS.keys()))
         
         st.write("<br>", unsafe_allow_html=True)
         if st.button("⚾ Play Ball! (全自動智慧出題)", use_container_width=True, type="primary"):
-            # ✨ 自動追蹤該球員在此單元難度的挑戰次數
             track_key = f"{selected_ep}_{selected_diff}"
             st.session_state.attempt_tracker[track_key] = st.session_state.attempt_tracker.get(track_key, 0) + 1
             
@@ -212,6 +222,11 @@ elif st.session_state.app_phase == "lobby":
             
             st.session_state.quiz_data = [] 
             st.session_state.app_phase = "quiz"
+            st.rerun()
+            
+        # 🛡️ 把遺失的登出按鈕也補回來了！
+        if st.button("🔌 離開球場 (清除資料與金鑰)", use_container_width=True):
+            st.session_state.clear()
             st.rerun()
 
 # ==========================================
@@ -231,7 +246,6 @@ elif st.session_state.app_phase == "quiz":
     with col_r:
         if not st.session_state.quiz_data:
             with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
-                # 將挑戰次數傳入，決定撈哪一份考卷
                 st.session_state.quiz_data = get_quiz_data(ep_name, diff_name, attempt_num)
                 st.rerun()
                 
