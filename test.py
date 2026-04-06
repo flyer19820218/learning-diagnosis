@@ -23,7 +23,6 @@ st.markdown("""
     .nl-action-text h4 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #202124; }
     .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
     .ai-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    .season-card { background-color: #ffffff; border: 2px solid #1a73e8; border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(26,115,232,0.1); }
     /* 讓 markdown 裡面的化學式跟文字對齊，且稍微放大 */
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
     </style>
@@ -85,7 +84,7 @@ if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
 if "current_episode" not in st.session_state: 
     keys = list(SEASON_1_DB.keys())
     st.session_state.current_episode = keys[0] if keys else "尚未載入賽程"
-if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1: 春訓營 (基礎記憶)"
+if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
 
 # 註冊使用者的 API Key (確保在呼叫 API 前生效)
 if st.session_state.user_api_key:
@@ -127,7 +126,7 @@ if st.session_state.app_phase == "login":
     st.write("<br><br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        st.markdown("<div class='season-card'>", unsafe_allow_html=True)
+        # 移除了醜醜的邊框，回歸乾淨排版
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #6c757d;'>自備裝備 (BYOK)，進入球員休息室</p>", unsafe_allow_html=True)
         st.write("---")
@@ -144,7 +143,6 @@ if st.session_state.app_phase == "login":
                 st.rerun()
             else:
                 st.error("🚨 必須輸入 API 金鑰才能上場打擊喔！")
-        st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
 # --- 8. [介面路由] 賽季大廳 ---
