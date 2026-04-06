@@ -4,6 +4,7 @@
 import streamlit as st
 import google.generativeai as genai
 import plotly.graph_objects as go
+import plotly.express as px
 import json
 import os 
 
@@ -23,12 +24,10 @@ st.markdown("""
     .nl-action-text h4 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #202124; }
     .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
     .ai-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
-    /* 讓 markdown 裡面的化學式跟文字對齊，且稍微放大 */
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
     </style>
 """, unsafe_allow_html=True)
 
-# 鎖定最新 2.5-flash 模型
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
@@ -37,11 +36,9 @@ MODEL_ID = "gemini-2.5-flash"
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
 1. 教學內容為台灣地區繁體中文。
-2. 【視覺排版規範】：文字顯示必須使用 Markdown 語法進行良好排版。化學式請務必使用標準符號（如 $H_2SO_4$、$CO_2$、$Na^+$），不可拆開連寫，以確保網頁畫面呈現專業且易讀。
-3. 【語音朗讀考量】：雖然畫面顯示為標準化學式，但若有專門給『講稿/對話』的欄位設計時，才需要把化學式一個字母一個字母分開（例如：H 2 S O 4）。
-4. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
-5. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
-6. 預留投打黃金秒數概念：若有情境對話，需預留音效淡化空間與破局音量。
+2. 【視覺排版規範】：文字顯示必須使用 Markdown 語法進行良好排版。化學式請務必使用標準符號（如 $H_2SO_4$、$CO_2$、$Na^+$）。
+3. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
+4. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
 """
 
 DIFFICULTY_LEVELS = {
@@ -76,6 +73,7 @@ SEASON_1_DB = load_local_db()
 # --- 5. 狀態管理初始化 ---
 # ==========================================
 if "user_api_key" not in st.session_state: st.session_state.user_api_key = ""
+if "student_profile" not in st.session_state: st.session_state.student_profile = {}
 if "app_phase" not in st.session_state: st.session_state.app_phase = "login"
 if "quiz_data" not in st.session_state: st.session_state.quiz_data = []
 if "user_ans" not in st.session_state: st.session_state.user_ans = {}
@@ -86,7 +84,6 @@ if "current_episode" not in st.session_state:
     st.session_state.current_episode = keys[0] if keys else "尚未載入賽程"
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
 
-# 註冊使用者的 API Key (確保在呼叫 API 前生效)
 if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
@@ -94,7 +91,6 @@ if st.session_state.user_api_key:
 # --- 6. AI 出題引擎 ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key):
-    # 若無金鑰，直接阻擋
     if not st.session_state.user_api_key:
         return FALLBACK_QUIZ
         
@@ -120,25 +116,44 @@ def get_quiz_data(episode_name, difficulty_key):
         return FALLBACK_QUIZ
 
 # ==========================================
-# --- 7. [介面路由] 登入頁面 (BYOK 模式) ---
+# --- 7. [介面路由] 登入頁面 (身分建檔) ---
 # ==========================================
 if st.session_state.app_phase == "login":
-    st.write("<br><br><br>", unsafe_allow_html=True)
+    st.write("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        # 移除了醜醜的邊框，回歸乾淨排版
+        # 完全移除醜框，乾淨排版
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #6c757d;'>自備裝備 (BYOK)，進入球員休息室</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #6c757d;'>建立球員檔案並驗證裝備 (BYOK)</p>", unsafe_allow_html=True)
         st.write("---")
         
-        # 讓使用者輸入自己的 API Key
-        api_input = st.text_input("🔑 請輸入你的 Gemini API 金鑰", type="password", placeholder="請輸入以 AIza 開頭的金鑰...")
-        st.caption("💡 [點此前往 Google AI Studio 申請免費金鑰](https://aistudio.google.com/app/apikey) (每天享免費 20 次額度)")
+        # --- 身分建檔區 (防呆下拉選單) ---
+        st.markdown("#### 👤 建立球員檔案")
+        c_grade, c_class, c_seat = st.columns(3)
+        with c_grade:
+            grade = st.selectbox("年級", ["國七", "國八", "國九", "高一", "高二", "高三"])
+        with c_class:
+            cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
+        with c_seat:
+            seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
+            
+        student_name = st.text_input("姓名 (選填)", placeholder="例如：王小明")
         
         st.write("<br>", unsafe_allow_html=True)
-        if st.button("🌐 授權綁定並登入", use_container_width=True):
+        
+        # --- API 金鑰區 ---
+        st.markdown("#### 🔑 驗證裝備 (API 金鑰)")
+        api_input = st.text_input("請輸入你的 Gemini API 金鑰", type="password", placeholder="AIzaSy...")
+        st.caption("💡 [點此前往 Google AI Studio 申請免費金鑰](https://aistudio.google.com/app/apikey)")
+        
+        st.write("<br>", unsafe_allow_html=True)
+        if st.button("🌐 綁定身分並登入大廳", use_container_width=True):
             if api_input.strip():
+                # 將身分資料存入 session_state
                 st.session_state.user_api_key = api_input.strip()
+                st.session_state.student_profile = {
+                    "grade": grade, "class": cls, "seat": seat, "name": student_name
+                }
                 st.session_state.app_phase = "lobby" 
                 st.rerun()
             else:
@@ -148,12 +163,15 @@ if st.session_state.app_phase == "login":
 # --- 8. [介面路由] 賽季大廳 ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
+    profile = st.session_state.student_profile
+    display_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
+    
     st.write("<br>", unsafe_allow_html=True)
     col_l, col_m, col_r = st.columns([1, 2, 1])
     
     with col_m:
-        st.markdown("<h2 style='text-align: center;'>🏟️ 選擇你的賽事</h2>", unsafe_allow_html=True)
-        st.success("✅ API 金鑰已成功載入！就緒完畢。")
+        st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎回到休息室，{display_name}！</h2>", unsafe_allow_html=True)
+        st.success("✅ 裝備檢查完畢！隨時可以上場。")
         st.write("---")
         
         selected_ep = st.selectbox("📌 選擇賽事局數 (第一季)", list(SEASON_1_DB.keys()))
@@ -168,7 +186,7 @@ elif st.session_state.app_phase == "lobby":
             st.session_state.app_phase = "quiz"
             st.rerun()
             
-        if st.button("🔌 登出並清除金鑰", use_container_width=True):
+        if st.button("🔌 登出並清除資料", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
@@ -214,7 +232,12 @@ elif st.session_state.app_phase == "dashboard":
     correct_count = 0
     total_q = len(st.session_state.quiz_data)
     mistakes_for_ai = ""
-    report_text = f"【化學大聯盟戰報】\n挑戰單元：{st.session_state.current_episode}\n挑戰難度：{st.session_state.current_difficulty}\n得分：{correct_count}/{total_q}\n\n"
+    
+    # 抓取球員身分生成專屬戰報
+    profile = st.session_state.student_profile
+    player_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
+    
+    report_text = f"【化學大聯盟戰報】\n球員：{player_name}\n挑戰單元：{st.session_state.current_episode}\n挑戰難度：{st.session_state.current_difficulty}\n得分：{correct_count}/{total_q}\n\n"
 
     for i, q in enumerate(st.session_state.quiz_data):
         user_choice = st.session_state.user_ans.get(i, "")
@@ -257,7 +280,7 @@ elif st.session_state.app_phase == "dashboard":
         st.download_button(
             label="📥 下載個人專屬戰報 (不上傳雲端)",
             data=report_text,
-            file_name=f"化學大聯盟戰報_{st.session_state.current_episode}.txt",
+            file_name=f"化學大聯盟戰報_{player_name}.txt",
             mime="text/plain",
             use_container_width=True
         )
@@ -269,7 +292,7 @@ elif st.session_state.app_phase == "dashboard":
             with st.spinner("教練分析中..."):
                 try:
                     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
-                    st.session_state.ai_analysis = model.generate_content(f"學生得 {correct_count}/{total_q}。錯題：{mistakes_for_ai}。請用棒球教練熱血口吻寫分析。").text
+                    st.session_state.ai_analysis = model.generate_content(f"球員 {player_name} 得 {correct_count}/{total_q}。錯題：{mistakes_for_ai}。請用棒球教練熱血口吻寫分析。").text
                 except Exception as e:
                     st.session_state.ai_analysis = f"⚠️ API 無效或額度耗盡 ({e})。請確認你的金鑰！"
         if st.session_state.ai_analysis: st.markdown(f"<div class='ai-box'>{st.session_state.ai_analysis}</div>", unsafe_allow_html=True)
@@ -280,7 +303,7 @@ elif st.session_state.app_phase == "dashboard":
                 try:
                     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
                     current_content = SEASON_1_DB.get(st.session_state.current_episode, "")
-                    st.session_state.ai_guide = model.generate_content(f"根據教材：{current_content}，寫出3點特訓指南。").text
+                    st.session_state.ai_guide = model.generate_content(f"根據教材：{current_content}，針對球員 {player_name} 寫出3點特訓指南。").text
                 except Exception as e:
                     st.session_state.ai_guide = f"⚠️ API 無效或額度耗盡 ({e})。請確認你的金鑰！"
         if st.session_state.ai_guide: st.markdown(f"<div class='ai-box'>{st.session_state.ai_guide}</div>", unsafe_allow_html=True)
