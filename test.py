@@ -1,89 +1,143 @@
 import streamlit as st
 import google.generativeai as genai
 import json
+import time
 
-# --- 系統初始化 ---
-st.set_page_config(page_title="動態分級出題引擎", page_icon="⚙️")
-st.markdown("<style>:root { color-scheme: light; } body { background-color: #fafaf9; color: #292524; }</style>", unsafe_allow_html=True)
+# --- 1. 頁面配置：設定為 16:9 寬版佈局 ---
+st.set_page_config(
+    page_title="化學大聯盟：適性化診斷系統",
+    page_icon="🧪",
+    layout="wide"  # 強制開啟 16:9 寬螢幕模式
+)
 
-# 替換成你的 API KEY (實戰請用 st.secrets)
-genai.configure(api_key=st.secrets.get("GEMINI_API_KEY", "請在此輸入你的API_KEY"))
+# 自定義視覺風格 (CSS)
+st.markdown("""
+    <style>
+    :root { color-scheme: light; }
+    .stApp { background-color: #fafaf9; }
+    .course-box {
+        background-color: white;
+        padding: 25px;
+        border-radius: 15px;
+        border: 1px solid #e7e5e4;
+        line-height: 1.8;
+        font-size: 1.1rem;
+    }
+    .stButton>button {
+        border-radius: 10px;
+        height: 3.5em;
+        font-weight: bold;
+        width: 100%;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# 模擬資料庫裡的「教材文本」(以你第一集的內容為例)
+# --- 2. 安全金鑰設定 (使用 Gemini 2.5 Flash) ---
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("🚨 找不到 API 金鑰！請在 Streamlit Cloud 的 Settings > Secrets 中設定 GEMINI_API_KEY")
+    st.stop()
+
+# 核心模型：使用最強 2.5 Flash
+MODEL_ID = "gemini-2.5-flash-preview-09-2025"
+
+# --- 3. 核心教材內容 (化學大聯盟 第一集：電解質) ---
 course_content = """
-在化學大聯盟裡，要被稱為電解質，必須滿足兩個嚴格的條件：第一，溶於水！第二，水溶液必須能夠導電！
-銅線跟鐵絲能導電但不能溶於水，所以不是電解質。
-阿瑞尼斯的解離說指出，電解質溶於水會拆解成帶正電的「陽離子」與帶負電的「陰離子」來傳遞電流。
-糖水和酒精是非電解質，因為它們溶於水但死都不肯拆解出離子。
-酸、鹼、鹽類是三大電解質家族。它們解離出的正負離子總電量絕對會相等，這叫做「電中性」。
+【化學大聯盟：第一局戰報】
+1. **電解質的嚴格定義**：
+   - 條件一：必須能「溶於水」。
+   - 條件二：水溶液必須能「導電」。
+   - *陷阱提醒：金屬（銅線、鐵絲）雖導電但不溶於水，所以金屬「不是」電解質。*
+
+2. **阿瑞尼斯的解離戰術**：
+   - 電解質入水後，會拆解成帶正電的「陽離子」與帶負電的「陰離子」。
+   - 靠著這些自由移動的離子，才能傳遞電流。
+
+3. **非電解質清單**：
+   - 糖水、酒精：溶於水但不解離，所以不導電。
+
+4. **防守陣型：電中性**：
+   - 陽離子總電量 ＝ 陰離子總電量。正負相互抵消，對外不顯電性。
 """
 
-# --- 定義 AI 系統指令 (強制 JSON 輸出與分級邏輯) ---
+# --- 4. AI 出題系統指令 ---
 system_instruction = """
 你是一個台灣國中理化科的專業命題系統。
-請根據使用者提供的【教材內容】與【指定難度】，即時生成一道單選題。
+請根據教材內容與指定難度，生成一題單選題。
 難度定義如下：
-- C級 (基礎記憶)：直接考名詞定義，選項無陷阱。
+- C級 (基礎記憶)：直接考名詞定義，無陷阱。
 - B級 (觀念理解)：考概念應用、基礎推論或簡單計算。
 - A級 (精熟推論)：考情境綜合應用、易混淆陷阱題。
 
-必須嚴格遵守以下 JSON 格式輸出，不可包含任何其他文字：
+必須回傳純 JSON 格式：
 {
     "level": "A或B或C",
-    "question": "題目完整敘述",
+    "question": "題目描述",
     "options": ["選項A", "選項B", "選項C", "選項D"],
-    "correct_answer": "正確的那個選項的完整文字",
-    "rationale": "詳細解析（需說明為何正確，以及其他選項錯在哪）"
+    "correct_answer": "正確答案完整文字",
+    "rationale": "詳細解析（說明正確原因，並診斷迷思點）"
 }
 """
 
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name=MODEL_ID,
     system_instruction=system_instruction,
-    generation_config={"temperature": 0.2, "response_mime_type": "application/json"}
+    generation_config={"temperature": 0.3, "response_mime_type": "application/json"}
 )
 
-# --- 網頁前端介面 ---
-st.title("⚙️ 化學大聯盟：動態分級出題引擎")
-st.info("系統會根據下方隱藏的教材文本，搭配你選擇的難度，由 AI 即時(Real-time)生成全新題目。")
+# --- 5. 狀態管理 ---
+if "current_quiz" not in st.session_state:
+    st.session_state.current_quiz = None
+if "is_submitted" not in st.session_state:
+    st.session_state.is_submitted = False
 
-# 狀態管理：保存當前生成的題目，避免網頁重整時消失
-if "current_dynamic_quiz" not in st.session_state:
-    st.session_state.current_dynamic_quiz = None
+# --- 6. 16:9 介面佈局 ---
+st.title("🧪 化學大聯盟：2.5 Flash 適性化診斷診所")
 
-# 使用者選擇難度
-selected_level = st.radio("選擇題目難度：", ["C級 (基礎記憶)", "B級 (觀念理解)", "A級 (精熟推論)"], horizontal=True)
+# 使用 columns 達成 16:9 佈置 (左:右 = 1:1.5)
+col_left, col_right = st.columns([1, 1.5], gap="large")
 
-if st.button("🚀 根據教材即時生成題目"):
-    with st.spinner(f"AI 正在構思 {selected_level} 題目..."):
-        try:
-            # 將教材與難度打包送給 AI
-            prompt = f"【指定難度】：{selected_level[0]}級\n【教材內容】：\n{course_content}"
-            response = model.generate_content(prompt)
-            
-            # 解析 AI 吐出來的 JSON
-            st.session_state.current_dynamic_quiz = json.loads(response.text)
-            st.session_state.user_answered = False # 重置作答狀態
-        except Exception as e:
-            st.error(f"生成失敗，請重試。錯誤訊息：{e}")
-
-# --- 渲染生成的題目與作答區塊 ---
-if st.session_state.current_dynamic_quiz:
-    quiz = st.session_state.current_dynamic_quiz
+with col_left:
+    st.subheader("📖 核心戰報 (教材)")
+    st.markdown(f"<div class='course-box'>{course_content.replace('\\n', '<br>')}</div>", unsafe_allow_html=True)
     
     st.divider()
-    st.markdown(f"### 📝 【等級 {quiz['level']}】測驗")
-    st.write(f"**題目：** {quiz['question']}")
+    st.subheader("⚙️ 診斷難度設定")
+    lvl = st.radio("選擇題目難度：", ["C級 (基礎)", "B級 (理解)", "A級 (精熟)"], horizontal=True)
     
-    # 作答區
-    user_choice = st.radio("請選擇：", quiz['options'], key="quiz_options")
-    
-    if st.button("✅ 提交答案") or st.session_state.get("user_answered"):
-        st.session_state.user_answered = True
-        if user_choice == quiz['correct_answer']:
-            st.success("🎉 答對了！")
-        else:
-            st.error("❌ 答錯了！")
+    if st.button("🚀 即時生成動態題目"):
+        with st.spinner("AI 正在根據 2.5 Flash 引擎生成題目..."):
+            try:
+                prompt = f"難度：{lvl[0]}級，教材內容：{course_content}"
+                response = model.generate_content(prompt)
+                st.session_state.current_quiz = json.loads(response.text)
+                st.session_state.is_submitted = False
+            except Exception as e:
+                st.error(f"連線失敗：{e}")
+
+with col_right:
+    if st.session_state.current_quiz:
+        quiz = st.session_state.current_quiz
+        st.subheader(f"📝 測驗階段：等級 {quiz['level']}")
+        
+        with st.container():
+            st.markdown(f"#### {quiz['question']}")
+            user_choice = st.radio("請回答：", quiz['options'], key="quiz_ans_radio")
             
-        # 顯示詳細解析
-        st.info(f"**💡 AI 獨家解析：**\n\n{quiz['rationale']}")
+            if st.button("🏁 提交作答"):
+                st.session_state.is_submitted = True
+                
+            if st.session_state.is_submitted:
+                if user_choice == quiz['correct_answer']:
+                    st.success("🎉 觀念正確！你已經掌握了這個知識點。")
+                else:
+                    st.error(f"❌ 答錯了！正確答案是：{quiz['correct_answer']}")
+                
+                with st.expander("🩺 查看深度診斷分析"):
+                    st.info(f"**AI 診斷建議：**\n\n{quiz['rationale']}")
+    else:
+        st.info("👈 請閱讀左側教材後，點擊按鈕開啟你的診斷測驗。")
+
+st.markdown("---")
+st.caption("⚡ Powered by Gemini 2.5 Flash | 預防死背答案，提升實戰力")
