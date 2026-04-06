@@ -260,17 +260,17 @@ elif st.session_state.app_phase == "quiz":
                     st.rerun()
 
 # ==========================================
-# --- 10. [介面路由] 學習儀表板 (視覺復刻巔峰版) ---
+# --- 10. [介面路由] 學習儀表板 ---
 # ==========================================
 elif st.session_state.app_phase == "dashboard":
-    # 建立上方標題區
-    st.markdown(f"<h1 style='text-align: center; color: #1e293b;'>🧪 {st.session_state.current_episode}</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #64748b;'>診斷結果已產生，請查看下方的戰術分析</p>", unsafe_allow_html=True)
+    st.markdown("## 📊 賽後診斷分析 (機密文件)")
     st.write("---")
     
-    # 1. 核心數據大卡片 (復刻你圖片中最上方的三個藍色區塊)
     correct_count = 0
     total_q = len(st.session_state.quiz_data)
+    profile = st.session_state.student_profile
+    player_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
+    
     mistakes_for_ai = ""
     for i, q in enumerate(st.session_state.quiz_data):
         user_choice = st.session_state.user_ans.get(i, "")
@@ -278,79 +278,33 @@ elif st.session_state.app_phase == "dashboard":
         if user_choice.startswith(ans_letter): correct_count += 1
         else: mistakes_for_ai += f"題目：{q['q']} (選:{user_choice}，正解:{ans_letter})。 "
 
-    rate = int(correct_count/total_q*100) if total_q > 0 else 0
-    
-    # 使用 HTML/CSS 復刻那張漂亮的數據卡片
-    st.markdown(f"""
-        <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 25px;">
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: center;">
-                <p style="color: #64748b; font-size: 14px; margin-bottom: 5px;">分數</p>
-                <p style="font-size: 36px; font-weight: 800; color: #1e293b; margin: 0;">{correct_count}/{total_q}</p>
-            </div>
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: center;">
-                <p style="color: #64748b; font-size: 14px; margin-bottom: 5px;">正確率</p>
-                <p style="font-size: 36px; font-weight: 800; color: #1e293b; margin: 0;">{rate}%</p>
-            </div>
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: left;">
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>正確</b> <span style="float: right;">{correct_count}</span></p>
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>錯誤</b> <span style="float: right;">{total_q - correct_count}</span></p>
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>未回答</b> <span style="float: right;">0</span></p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    col_l, col_r = st.columns([1, 1.5], gap="large")
+    with col_l:
+        st.metric(label="打擊率 (正確率)", value=f"{int(correct_count/total_q*100) if total_q > 0 else 0} %")
+        with st.expander("🔍 檢視賽後檢討 (錯題解析)", expanded=True):
+            for i, q in enumerate(st.session_state.quiz_data):
+                if not st.session_state.user_ans.get(i, "").startswith(q['ans'].strip()):
+                    st.markdown(f"**Q{i+1}: {q['q']}**")
+                    st.error(f"你的答案：{st.session_state.user_ans.get(i, '')}")
+                    st.success(f"正確答案：{q['ans']}")
+                    st.info(f"💡 診斷：{q['diag']}")
+                    st.write("---")
 
-    # 2. 優勢與精進方向 (那張深色小圖卡與分析按鈕)
-    st.markdown(f"""
-        <div style="background-color: #f1f5f9; padding: 25px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px;">
-            <div style="display: flex; align-items: center; gap: 20px;">
-                <div style="background-color: #0f172a; width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 30px;">📈</div>
-                <div>
-                    <h4 style="margin: 0; color: #1e293b;">優勢與精進方向</h4>
-                    <p style="margin: 0; color: #64748b; font-size: 14px;">點擊右側按鈕，查看教練給你的主要優勢與建議。</p>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # 擺放 AI 分析按鈕
-    if not st.session_state.ai_analysis:
-        if st.button("🔍 分析我的學習成效", use_container_width=True, type="primary"):
-            with st.spinner("教練正在調閱比賽錄影帶..."):
-                profile = st.session_state.student_profile
-                p_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
-                analysis, guide = get_ai_report(p_name, f"{correct_count}/{total_q}", mistakes_for_ai, SEASON_1_DB.get(st.session_state.current_episode, ""))
+    with col_r:
+        st.markdown("### 🚀 AI 教練特訓室")
+        if st.button("✨ 進行全方位賽後診斷 (消耗 1 體力)", use_container_width=True):
+            with st.spinner("教練調閱錄影帶中..."):
+                analysis, guide = get_ai_report(player_name, f"{correct_count}/{total_q}", mistakes_for_ai, SEASON_1_DB.get(st.session_state.current_episode, ""))
                 st.session_state.ai_analysis = analysis
                 st.session_state.ai_guide = guide
-                st.rerun()
-
-    # 3. 繼續學習 (復刻圖片下方的兩個橫向卡片)
-    if st.session_state.ai_analysis:
-        st.markdown("### 📋 繼續學習")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"""
-                <div style="background-color: #f1f5f9; padding: 20px; border-radius: 15px; height: 180px;">
-                    <div style="display: flex; gap: 15px;">
-                        <div style="background-color: #1e293b; width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">🌟</div>
-                        <b>教練熱血分析</b>
-                    </div>
-                    <p style="font-size: 13px; color: #475569; margin-top: 10px;">{st.session_state.ai_analysis}</p>
-                </div>
-            """, unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"""
-                <div style="background-color: #f1f5f9; padding: 20px; border-radius: 15px; height: 180px;">
-                    <div style="display: flex; gap: 15px;">
-                        <div style="background-color: #065f46; width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">📖</div>
-                        <b>研讀特訓指南</b>
-                    </div>
-                    <p style="font-size: 13px; color: #475569; margin-top: 10px;">{st.session_state.ai_guide}</p>
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.write("<br>", unsafe_allow_html=True)
-    if st.button("🔄 回到大廳"):
-        st.session_state.app_phase = "lobby"
-        st.session_state.ai_analysis = None
-        st.session_state.ai_guide = None
-        st.rerun()
+                
+        if st.session_state.ai_analysis:
+            st.markdown(f"<div class='ai-box'><b>📈 教練分析：</b><br>{st.session_state.ai_analysis}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='ai-box'><b>📖 特訓菜單：</b><br>{st.session_state.ai_guide}</div>", unsafe_allow_html=True)
+        
+        st.write("---")
+        if st.button("🔄 回到大廳 (再次挑戰將產生新卷)"):
+            st.session_state.app_phase = "lobby"
+            st.session_state.ai_analysis = None
+            st.session_state.ai_guide = None
+            st.rerun()
