@@ -40,7 +40,7 @@ else:
     st.stop()
 
 # 核心模型：使用最強 2.5 Flash
-MODEL_ID = "gemini-2.5-flash-preview-09-2025"
+MODEL_ID = "gemini-2.5-flash"
 
 # --- 3. 核心教材內容 (化學大聯盟 第一集：電解質) ---
 course_content = """
