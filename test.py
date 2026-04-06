@@ -5,7 +5,7 @@ import streamlit as st
 import google.generativeai as genai
 import plotly.graph_objects as go
 import json
-import os # 新增：用於處理檔案路徑
+import os 
 
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
@@ -24,6 +24,8 @@ st.markdown("""
     .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
     .ai-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
     .season-card { background-color: #ffffff; border: 2px solid #1a73e8; border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(26,115,232,0.1); }
+    /* 讓 markdown 裡面的化學式跟文字對齊，且稍微放大 */
+    .stMarkdown p { line-height: 1.8; font-size: 16px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -38,14 +40,14 @@ MODEL_ID = "gemini-2.5-flash"
 # ==========================================
 # --- 3. 系統提示詞設定 (大聯盟最新規範) ---
 # ==========================================
-# 這是 AI 的大腦規範，確保所有生成的文字符合你的廣播劇錄音需求
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
 1. 教學內容為台灣地區繁體中文。
-2. 化學式必須一個字母一個字母分開（例如：H 2 S O 4），嚴禁連寫，不然語音會直接當英文唸。
-3. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
-4. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
-5. 預留投打黃金秒數概念：若有情境對話，需預留音效淡化空間與破局音量（文字上以生動的棒球轉播口吻呈現）。
+2. 【視覺排版規範】：文字顯示必須使用 Markdown 語法進行良好排版。化學式請務必使用標準符號（如 $H_2SO_4$、$CO_2$、$Na^+$），不可拆開連寫，以確保網頁畫面呈現專業且易讀。
+3. 【語音朗讀考量】：雖然畫面顯示為標準化學式，但若有專門給『講稿/對話』的欄位設計時，才需要把化學式一個字母一個字母分開（例如：H 2 S O 4）。
+4. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
+5. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
+6. 預留投打黃金秒數概念：若有情境對話，需預留音效淡化空間與破局音量。
 """
 
 DIFFICULTY_LEVELS = {
@@ -61,7 +63,7 @@ FALLBACK_QUIZ = [
 # ==========================================
 # --- 4. 動態載入資料庫 (讀取 JSON) ---
 # ==========================================
-@st.cache_data # 快取資料，避免每次切換頁面都重新讀取檔案
+@st.cache_data 
 def load_local_db():
     json_path = os.path.join("data", "season1_db.json")
     try:
@@ -84,25 +86,28 @@ if "quiz_data" not in st.session_state: st.session_state.quiz_data = []
 if "user_ans" not in st.session_state: st.session_state.user_ans = {}
 if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
 if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
-if "current_episode" not in st.session_state: st.session_state.current_episode = list(SEASON_1_DB.keys())[0]
+if "current_episode" not in st.session_state: 
+    # 防呆設計：若 JSON 為空，給予預設值
+    keys = list(SEASON_1_DB.keys())
+    st.session_state.current_episode = keys[0] if keys else "尚未載入賽程"
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1: 春訓營 (基礎記憶)"
 
 # ==========================================
 # --- 6. AI 出題引擎 ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key):
-    # 注入 SYSTEM_INSTRUCTION
     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
     course_content = SEASON_1_DB.get(episode_name, "")
-    diff_prompt = DIFFICULTY_LEVELS[difficulty_key]
+    diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
     
+    # 修改：要求生成 10 題
     prompt = f"""
-    請根據以下教材，生成 3 題單選題。
+    請根據以下教材，生成 10 題單選題。
     【測驗單元】：{episode_name}
     【難度要求】：{diff_prompt}
     【教材內容】：{course_content}
     
-    請以 JSON 陣列格式回傳：[{{'topic':'知識點','q':'題目','options':['A. 選項1','B. 選項2','C. 選項3','D. 選項4'],'ans':'正確字母(如A)','diag':'解析'}}]。
+    請以 JSON 陣列格式回傳：[{{'topic':'知識點','q':'題目(可用 $化學式$ 排版)','options':['A. 選項1','B. 選項2','C. 選項3','D. 選項4'],'ans':'正確字母(如A)','diag':'解析'}}]。
     """
     try:
         response = model.generate_content(prompt)
@@ -164,18 +169,19 @@ elif st.session_state.app_phase == "quiz":
 
     with col_l:
         st.info("📖 戰術板 (講義複習)") 
+        # 使用 Markdown 渲染 JSON 中的內容
         st.markdown(SEASON_1_DB.get(ep_name, "讀取失敗"))
 
     with col_r:
         if not st.session_state.quiz_data:
-            with st.spinner("🤖 AI 教練正在為你動態生成專屬球路 (題庫)..."):
+            with st.spinner("🤖 AI 教練正在為你動態生成 10 題專屬球路..."):
                 st.session_state.quiz_data = get_quiz_data(st.session_state.current_episode, st.session_state.current_difficulty)
                 st.rerun()
 
         if st.session_state.quiz_data:
             with st.form("quiz_form"):
                 for i, q in enumerate(st.session_state.quiz_data):
-                    st.write(f"**Q{i+1}: {q['q']}**")
+                    st.markdown(f"**Q{i+1}: {q['q']}**")
                     st.session_state.user_ans[i] = st.radio(f"Q{i}_options", q['options'], key=f"q_{i}", label_visibility="collapsed")
                     st.write("---")
                 
@@ -207,7 +213,6 @@ elif st.session_state.app_phase == "dashboard":
             mistakes_for_ai += f"題目：{q['q']} (選:{user_choice}，正解:{ans_letter})。 "
             report_text += f"Q{i+1}: {q['q']} -> ❌ 答錯 (你的答案:{user_choice}, 正解:{ans_letter})\n    診斷:{q['diag']}\n"
 
-    # 重新計算實際得分的 report_text
     report_text = report_text.replace(f"得分：0/{total_q}", f"得分：{correct_count}/{total_q}")
 
     col_l, col_r = st.columns([1, 1.5], gap="large")
@@ -219,21 +224,20 @@ elif st.session_state.app_phase == "dashboard":
             fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=150, annotations=[dict(text=f'{correct_count}/{total_q}', x=0.5, y=0.5, font_size=28, showarrow=False)])
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         with c2:
-            st.metric(label="打擊率 (正確率)", value=f"{int(correct_count/total_q*100)} %")
+            st.metric(label="打擊率 (正確率)", value=f"{int(correct_count/total_q*100) if total_q > 0 else 0} %")
             st.caption(f"✅ 安打 {correct_count} / ❌ 出局 {total_q - correct_count}")
             
         with st.expander("🔍 檢視賽後檢討 (錯題解析)", expanded=(correct_count < total_q)):
-            if correct_count == total_q: st.success("🎉 完美打擊！無錯題！")
+            if correct_count == total_q and total_q > 0: st.success("🎉 完美打擊！無錯題！")
             else:
                 for i, q in enumerate(st.session_state.quiz_data):
                     if not st.session_state.user_ans.get(i, "").startswith(q['ans'].strip()):
-                        st.write(f"**Q{i+1}: {q['q']}**")
+                        st.markdown(f"**Q{i+1}: {q['q']}**")
                         st.error(f"你的答案：{st.session_state.user_ans.get(i, '')}")
                         st.success(f"正確答案：{q['ans']}")
                         st.info(f"💡 診斷：{q['diag']}")
                         st.write("---")
         
-        # 新增：自動下載戰報功能 (區塊 10)
         st.write("<br>", unsafe_allow_html=True)
         st.download_button(
             label="📥 下載個人專屬戰報 (不上傳雲端)",
@@ -249,7 +253,6 @@ elif st.session_state.app_phase == "dashboard":
         if st.button("✨ 聽取教練分析", key="btn_analysis"):
             with st.spinner("教練分析中..."):
                 try:
-                    # 套用 SYSTEM_INSTRUCTION
                     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
                     st.session_state.ai_analysis = model.generate_content(f"學生得 {correct_count}/{total_q}。錯題：{mistakes_for_ai}。請用棒球教練熱血口吻寫分析。").text
                 except Exception:
