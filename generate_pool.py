@@ -3,49 +3,116 @@ import json
 import os
 import time
 
-# --- 設定區 ---
+# ==========================================
+# --- 1. 設定區 (Pro 哥親自操刀) ---
+# ==========================================
+# 🚨 請填入你的真實 API Key
 genai.configure(api_key="AIzaSyDYFN7A7zUwysGO3Mel3NyQO3dyeIO8ajQ")
-model = genai.GenerativeModel('gemini-2.5-flash')
 
-# 難度定義
-DIFFICULTIES = ["Level 1-基礎記憶", "Level 2-觀念應用", "Level 3-素養思考"]
-EPISODE = "第一季：電解質大聯盟"
-BATCH_SIZE = 10  # 每批出 10 題
-TOTAL_TARGET = 100 # 每個難度總共要 100 題
+# 聽教練的話，這次絕對不讓 flash 弟弟來亂，直接上 Pro！
+MODEL_ID = 'gemini-2.5-pro'
 
-def get_batch_questions(difficulty, count):
+# 必須把你的 11 大錄音規範也寫進來，不然 Pro 哥出題會忘記格式
+SYSTEM_INSTRUCTION = """
+你現在是『教學 AI 設計』。在生成題目、選項、解析時，必須嚴格遵守以下規範：
+1. 教學內容為台灣地區繁體中文。
+2. 視覺排版：化學式必須使用 Markdown LaTeX 格式（如 $H_2SO_4$、$CO_2$），嚴禁連寫中斷排版。
+3. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
+4. 曉臻助教的解析不可有「喔、呢、吧」等語助詞，改用加強語氣的肯定句。
+"""
+
+model = genai.GenerativeModel(
+    model_name=MODEL_ID,
+    system_instruction=SYSTEM_INSTRUCTION
+)
+
+# ==========================================
+# --- 2. 讀取自家講義資料庫 ---
+# ==========================================
+def load_course_data():
+    try:
+        with open("data/season1_db.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"讀取講義失敗：{e}")
+        return {}
+
+course_db = load_course_data()
+
+DIFFICULTIES = {
+    "Level 1-基礎記憶": "基礎觀念題，直接測驗定義與名詞解釋，不需要複雜計算。",
+    "Level 2-觀念應用": "進階應用題，需要結合兩個以上的觀念，或是判斷常見的陷阱題。",
+    "Level 3-素養思考": "生活素養與實驗推論題，請設計情境（例如實驗室調配溶液），需要學生進行邏輯推導。"
+}
+
+BATCH_SIZE = 10  # 每次還是乖乖出 10 題，確保 Pro 哥品質穩定
+TOTAL_TARGET = 100 # 每個難度的目標題數
+
+# ==========================================
+# --- 3. 打擊函數 (自動生成與過濾) ---
+# ==========================================
+def get_batch_questions(ep_name, content, diff_name, diff_desc):
     prompt = f"""
-    你是國中理化老師，請針對「{EPISODE}」單元，出 {count} 題「{difficulty}」等級的選擇題。
-    要求：
-    1. 必須符合該難度等級。
-    2. 輸出格式必須是純 JSON 列表，不要有額外文字。
-    3. 每個物件包含: "q" (題目), "options" (四個選項的列表), "a" (正確答案的索引0-3), "reason" (教練分析/解析)。
+    請根據以下教材內容，出 {BATCH_SIZE} 題「{diff_name}」等級的單選題。
+    【單元名稱】：{ep_name}
+    【難度要求】：{diff_desc}
+    【教材內容】：{content}
+    
+    請以純 JSON 陣列格式回傳（嚴禁加上 ```json 標記，直接輸出中括號開始的陣列）：
+    [{{"topic":"對應知識點","q":"題目內容(可用 $化學式$ 排版)","options":["A. 選項1","B. 選項2","C. 選項3","D. 選項4"],"ans":"A","diag":"教練解析"}}]
     """
     try:
         response = model.generate_content(prompt)
-        # 簡單過濾掉 markdown 的 json 標記
-        text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(text)
+        text = response.text.strip()
+        # 幫 Pro 哥防呆，清掉多餘的 Markdown 符號
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.endswith("```"):
+            text = text[:-3]
+            
+        return json.loads(text.strip())
     except Exception as e:
-        print(f"發生錯誤: {e}")
+        print(f"  ❌ [{ep_name} - {diff_name}] 此局發生失誤: {e}")
         return []
 
-# --- 開始量產 ---
+# ==========================================
+# --- 4. 正式量產啟動 ---
+# ==========================================
+if not course_db:
+    print("🚨 找不到 data/season1_db.json，請先確認檔案存在！")
+    exit()
+
 full_pool = {}
 
-for diff in DIFFICULTIES:
-    print(f"🚀 開始量產 {diff}...")
-    diff_list = []
-    while len(diff_list) < TOTAL_TARGET:
-        print(f"目前進度: {len(diff_list)}/{TOTAL_TARGET}")
-        batch = get_batch_questions(diff, BATCH_SIZE)
-        if batch:
-            diff_list.extend(batch)
-            time.sleep(2) # 稍微休息，避免觸發 API 頻率限制
-    full_pool[diff] = diff_list[:TOTAL_TARGET] # 確保剛好 100 題
+print("⚾ 化學大聯盟：全賽季題庫量產計畫 START ⚾\n")
 
-# 儲存成檔案
+for ep_name, ep_data in course_db.items():
+    print(f"🏟️ 進入賽事：{ep_name}")
+    full_pool[ep_name] = {}
+    content = ep_data["content"]
+    
+    for diff_name, diff_desc in DIFFICULTIES.items():
+        print(f"  🚀 開始量產 [{diff_name}]...")
+        diff_list = []
+        
+        while len(diff_list) < TOTAL_TARGET:
+            print(f"    ⏳ 目前進度: {len(diff_list)} / {TOTAL_TARGET}")
+            batch = get_batch_questions(ep_name, content, diff_name, diff_desc)
+            
+            if batch:
+                diff_list.extend(batch)
+                # Pro 哥也是需要喘口氣的，暫停 3 秒避免 API 判我們犯規
+                time.sleep(3) 
+        
+        # 確保不多不少，精準擷取 100 題
+        full_pool[ep_name][diff_name] = diff_list[:TOTAL_TARGET]
+        print(f"  ✅ [{diff_name}] 100 題達標！\n")
+
+# ==========================================
+# --- 5. 輸出實體檔案 ---
+# ==========================================
+os.makedirs("data", exist_ok=True)
 with open("data/quiz_pool.json", "w", encoding="utf-8") as f:
     json.dump(full_pool, f, ensure_ascii=False, indent=4)
 
-print("✅ 300 題黃金題庫量產成功！檔案已存於 data/quiz_pool.json")
+print("🏆 恭喜教練！各單元黃金題庫量產成功！實體檔案已存於 data/quiz_pool.json")
