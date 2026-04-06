@@ -5,30 +5,38 @@ import json
 import time
 
 # --- 1. 系統與視覺初始化 ---
-st.set_page_config(page_title="化學大聯盟：學習系統", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="化學大聯盟：企業級學習系統", page_icon="🎓", layout="wide")
 
 st.markdown("""
     <style>
     :root { color-scheme: light; }
-    body { background-color: #ffffff; color: #202124; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+    body { background-color: #f0f2f5; color: #202124; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
     
-    .main-card { background-color: #f8f9fa; border-radius: 24px; padding: 32px; margin-bottom: 24px; }
+    .main-card { background-color: #ffffff; border-radius: 20px; padding: 32px; margin-bottom: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .dashboard-title { font-size: 32px; font-weight: 500; color: #202124; margin-bottom: 24px; }
     .stat-label { font-size: 16px; color: #5f6368; }
     .stat-value { font-size: 24px; font-weight: 600; color: #14b8a6; text-align: right; }
     .stat-value-wrong { font-size: 24px; font-weight: 600; color: #202124; text-align: right; }
     .section-title { font-size: 22px; font-weight: 500; color: #202124; margin-bottom: 16px; }
-    .topic-list { color: #3c4043; line-height: 2; font-size: 16px; }
     
+    /* Google 登入按鈕專屬樣式 */
+    .google-btn {
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        background-color: white; color: #3c4043; border: 1px solid #dadce0;
+        border-radius: 24px; padding: 12px 24px; font-weight: 500; font-size: 16px;
+        cursor: pointer; transition: background-color 0.3s; width: 100%; margin-top: 20px;
+    }
+    .google-btn:hover { background-color: #f8f9fa; border-color: #d2e3fc; }
+    
+    /* 系統按鈕優化 */
     .stButton>button {
-        background-color: #e8f0fe; color: #1967d2; border-radius: 20px; border: none;
+        background-color: #1a73e8; color: white; border-radius: 20px; border: none;
         padding: 10px 24px; font-weight: 600; font-size: 15px; transition: all 0.2s; width: 100%;
     }
-    .stButton>button:hover { background-color: #d2e3fc; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3); }
-    .ai-box { background-color: #ffffff; border: 1px solid #e8eaed; border-radius: 16px; padding: 24px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .stButton>button:hover { background-color: #1557b0; }
     
-    /* 登入畫面專用卡片 */
-    .login-box { max-width: 400px; margin: 0 auto; background-color: #f8f9fa; padding: 40px; border-radius: 24px; border: 1px solid #e8eaed; text-align: center;}
+    .login-box { background-color: #ffffff; padding: 40px; border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 450px; margin: 40px auto; }
+    .ai-box { background-color: #f8f9fa; border-left: 4px solid #1a73e8; border-radius: 0 12px 12px 0; padding: 20px; margin-top: 16px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -41,57 +49,85 @@ else:
 
 MODEL_ID = "gemini-2.5-flash"
 
-# --- 3. 狀態管理 (APP 狀態與學生資料 JSON 模擬) ---
-if "app_phase" not in st.session_state: st.session_state.app_phase = "login"
-if "student_data" not in st.session_state: st.session_state.student_data = {"name": "", "id": "", "history": []}
+# --- 3. 學校與學號防呆資料庫 (Dictionary) ---
+SCHOOL_DB = {
+    "台北市": ["建國中學", "北一女中", "師大附中"],
+    "台中市": ["台中一中", "台中女中", "文華高中", "明道中學"],
+    "高雄市": ["高雄中學", "高雄女中", "道明中學"]
+}
+# 模擬學號清單 (實務上可以從 Excel 匯入)
+STUDENT_IDS = [f"112{str(i).zfill(3)}" for i in range(1, 31)] # 112001 ~ 112030
+
+# --- 4. 狀態管理 (APP 狀態機： SSO -> 綁定資料 -> 儀表板) ---
+if "app_phase" not in st.session_state: st.session_state.app_phase = "sso_login"
+if "student_data" not in st.session_state: 
+    st.session_state.student_data = {"email": "", "region": "", "school": "", "id": "", "name": "", "history": []}
 if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
 
-# --- 模擬的教材與錯題 ---
-course_content = "1. 電解質定義：須滿足溶於水且導電。金屬不溶於水非電解質。\n2. 解離說：電解質入水拆解成正負離子。\n3. 電中性原則：正負電量相等。"
-mock_mistakes = "學生將『銅線』誤認為電解質；且認為『pH=7』才符合電中性原則。"
+# 模擬的教材與錯題
+mock_mistakes = "將『銅線』誤認為電解質；且認為『pH=7』才符合電中性。"
 
 # ==========================================
-# 介面路由 1：登入畫面
+# 介面路由 1：Google SSO 授權頁面
 # ==========================================
-if st.session_state.app_phase == "login":
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-        st.image("https://cdn-icons-png.flaticon.com/512/9338/9338142.png", width=100) # 給個化學燒杯小圖示
-        st.markdown("<h2>化學大聯盟：學員登入</h2>", unsafe_allow_html=True)
-        
-        # 登入表單
-        stu_name = st.text_input("姓名 (真實姓名或暱稱)", placeholder="例如：王小明")
-        stu_id = st.text_input("學號 / 帳號", placeholder="例如：112001")
-        
-        if st.button("🚀 進入專屬學習系統"):
-            if stu_name and stu_id:
-                # 把學生資料存進我們模擬的 JSON 結構中
-                st.session_state.student_data["name"] = stu_name
-                st.session_state.student_data["id"] = stu_id
-                st.session_state.app_phase = "dashboard"
-                st.rerun()
-            else:
-                st.error("⚠️ 請完整輸入姓名與學號喔！")
-        st.markdown("</div>", unsafe_allow_html=True)
+if st.session_state.app_phase == "sso_login":
+    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+    st.image("https://cdn-icons-png.flaticon.com/512/2950/2950282.png", width=80) # 替換為教育 icon
+    st.markdown("<h2>化學大聯盟</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #5f6368;'>為確保學習紀錄安全，請使用學校 Google 帳號登入</p>", unsafe_allow_html=True)
+    
+    # 模擬 Google 登入按鈕
+    if st.button("🌐 使用 Google 教育帳號登入", type="secondary"):
+        with st.spinner("正在驗證 Google OAuth 憑證..."):
+            time.sleep(1.5) # 模擬網路延遲
+            # 取得假授權的 Email
+            st.session_state.student_data["email"] = "student123@gapps.school.edu.tw" 
+            st.session_state.app_phase = "profile_setup"
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 介面路由 2：測驗結果儀表板
+# 介面路由 2：防呆資料綁定 (下拉選單)
+# ==========================================
+elif st.session_state.app_phase == "profile_setup":
+    st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+    st.markdown("<h3>📍 綁定學籍資料</h3>", unsafe_allow_html=True)
+    st.success(f"✅ 已授權帳號：{st.session_state.student_data['email']}")
+    
+    # 防呆下拉選單 (連動機制)
+    sel_region = st.selectbox("1. 選擇地區", list(SCHOOL_DB.keys()))
+    sel_school = st.selectbox("2. 選擇學校", SCHOOL_DB[sel_region])
+    sel_id = st.selectbox("3. 選擇學號", STUDENT_IDS)
+    
+    # 名字是選填 (Text Input)
+    sel_name = st.text_input("4. 姓名 (選填)", placeholder="留空將以學號作為代稱")
+    
+    st.write("") # 間距
+    if st.button("確認綁定並進入系統"):
+        st.session_state.student_data["region"] = sel_region
+        st.session_state.student_data["school"] = sel_school
+        st.session_state.student_data["id"] = sel_id
+        st.session_state.student_data["name"] = sel_name if sel_name else f"同學 ({sel_id})"
+        st.session_state.app_phase = "dashboard"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ==========================================
+# 介面路由 3：測驗結果儀表板 (左 1 : 右 2)
 # ==========================================
 elif st.session_state.app_phase == "dashboard":
     
-    # 顯示客製化歡迎詞
-    stu_name = st.session_state.student_data["name"]
-    st.markdown(f"<div class='dashboard-title'>太棒了，{stu_name} 完成測驗了！</div>", unsafe_allow_html=True)
+    stu = st.session_state.student_data
+    # 標題加入學校與姓名
+    st.markdown(f"<div class='dashboard-title'>太棒了，{stu['school']} 的 {stu['name']} 完成測驗了！</div>", unsafe_allow_html=True)
     
-    # --- 頂部大卡片：分數與甜甜圈圖 ---
+    # --- 頂部大卡片 ---
     st.markdown("<div class='main-card'>", unsafe_allow_html=True)
-    col_chart, col_stats = st.columns([1, 2]) # 這裡也可以調整比例
+    col_chart, col_stats = st.columns([1, 2])
     
     with col_chart:
         fig = go.Figure(data=[go.Pie(labels=['答對', '答錯'], values=[2, 8], hole=0.75, 
-                                     marker_colors=['#14b8a6', '#202124'], textinfo='none')])
+                                     marker_colors=['#1a73e8', '#e8eaed'], textinfo='none')])
         fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10), height=220, 
                           annotations=[dict(text='2/10<br><span style="font-size:16px; color:#5f6368">20%</span>', x=0.5, y=0.5, font_size=32, showarrow=False)])
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -107,7 +143,7 @@ elif st.session_state.app_phase == "dashboard":
         with c4: st.markdown("<div class='stat-value-wrong'>8</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # --- 下方雙欄：左 1 (三分之一) vs 右 2 (三分之二) ---
+    # --- 下方雙欄：左 1 (涵蓋主題) vs 右 2 (AI 分析) ---
     col_left, col_right = st.columns([1, 2], gap="large")
     
     with col_left:
@@ -124,18 +160,18 @@ elif st.session_state.app_phase == "dashboard":
         st.markdown("</div>", unsafe_allow_html=True)
         
     with col_right:
-        st.markdown("<div class='main-card' style='height: 100%; background-color: #f0f4f9;'>", unsafe_allow_html=True)
+        st.markdown("<div class='main-card' style='height: 100%; background-color: #f8f9fa; border: 1px solid #e8eaed;'>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>學無止境 (AI 專屬擴充)</div>", unsafe_allow_html=True)
-        st.write(f"可選取下方的 AI 功能，生成針對 {stu_name} 弱點的新教材。")
+        st.write(f"系統已將你的學習紀錄綁定至 Google 帳號：`{stu['email']}`")
+        st.write("可選取下方的 AI 功能，生成針對你弱點的新教材。")
         
-        if st.button("📊 深度分析我的學習成效"):
+        if st.button("📊 產生專屬學習成效診斷"):
             with st.spinner("Gemini 正在分析盲點..."):
                 model = genai.GenerativeModel(MODEL_ID, generation_config={"temperature": 0.5})
-                # Prompt 裡面加入學生的名字，讓 AI 更有專屬感！
-                prompt = f"學生 {stu_name} 在化學測驗得 20 分。錯題盲點：{mock_mistakes}。請以老師的口吻，稱呼學生的名字，寫出約 200 字的「學習優勢與精進方向」，語氣鼓勵。"
+                prompt = f"學生 {stu['name']} (學校:{stu['school']}) 在化學測驗得 20 分。錯題盲點：{mock_mistakes}。請以溫暖的老師口吻，針對他的盲點寫出約 200 字的「學習優勢與精進方向」。"
                 st.session_state.ai_analysis = model.generate_content(prompt).text
                 
-                # 模擬將診斷報告存入 JSON (未來這裡會寫入 Firebase 資料庫)
+                # 寫入歷史紀錄 JSON
                 st.session_state.student_data["history"].append({"date": "2026-04-06", "score": 20, "ai_report": st.session_state.ai_analysis})
 
         if st.session_state.ai_analysis:
@@ -144,12 +180,12 @@ elif st.session_state.app_phase == "dashboard":
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
-    # 開發者視角：讓你看看未來要存進資料庫的 JSON 長什麼樣子
-    with st.expander("🛠️ 開發者視角：檢視學生的後台 JSON 資料"):
+    # 開發者後台視角
+    with st.expander("🛠️ 開發者視角：檢視存入資料庫的最終 JSON"):
         st.json(st.session_state.student_data)
-    
-    if st.button("登出 / 切換帳號"):
-        st.session_state.app_phase = "login"
-        st.session_state.student_data = {"name": "", "id": "", "history": []}
+        
+    if st.button("登出 Google 帳號"):
+        st.session_state.app_phase = "sso_login"
+        st.session_state.student_data = {"email": "", "region": "", "school": "", "id": "", "name": "", "history": []}
         st.session_state.ai_analysis = None
         st.rerun()
