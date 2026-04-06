@@ -11,7 +11,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -19,13 +19,31 @@ st.markdown("""
     html, body, .stApp, p, h1, h2, h3, h4, h5, h6, li {
         font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
-    .nl-action-card { background-color: #f8f9fa; border-radius: 16px; padding: 20px; display: flex; align-items: flex-start; gap: 16px; margin-bottom: 12px; border: 1px solid #e8eaed; }
-    .nl-action-icon { width: 50px; height: 50px; border-radius: 12px; background-color: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
-    .nl-action-text h4 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; color: #202124; }
-    .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
-    .ai-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    
+    /* 復刻 Image 10 數據大卡片樣式 */
+    .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .stat-label { color: #64748b; font-size: 14px; margin-bottom: 5px; text-align: center;}
+    .stat-value { font-size: 32px; font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
+    .stat-detail { color: #0f172a; margin: 0; font-size: 14px; line-height: 1.8;}
+    
+    /* 復刻 Image 10 藍色分析大卡片 */
+    .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
+    .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+    .analysis-text h4 { margin: 0; color: #1e293b; }
+    .analysis-text p { margin: 0; color: #64748b; font-size: 14px; }
+    
+    /* 復刻 Image 10 下方學習卡片 */
+    .learning-card { background-color: #f8fafc; padding: 20px; border-radius: 12px; height: 180px;}
+    .learning-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .learning-card-icon { background-color: #1e293b; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;}
+    .learning-card-header b { font-size: 16px; color: #1e293b;}
+    .learning-card-content { font-size: 13px; color: #475569; line-height: 1.6;}
+    
+    /* 復刻 Image 10 的 AI 解析結果區塊 */
+    .ai-result-box { background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 20px; border-radius: 0 15px 15px 0; min-height: 200px; margin-bottom: 16px; }
+    
+    /* 視覺基礎 */
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
-    .confidential-note { color: #d93025; font-weight: 600; border: 1px solid #d93025; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -49,6 +67,7 @@ DIFFICULTY_LEVELS = {
     "Level 3-素養思考": "生活素養與實驗推論題，需要邏輯推導。"
 }
 
+# 🛠️ 修復 Bug: 防止 KeyError: 'q'
 FALLBACK_QUIZ = [
     {"topic": "系統防護", "q": "目前 API 額度過載，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
@@ -104,7 +123,7 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. AI 出題引擎 (終極嚴格版控機制) ---
+# --- 6. AI 出題引擎 (自動版控機制) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
@@ -121,44 +140,34 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
     
-    # ✨ 終極嚴格的 Prompt：直接給模板，嚴禁 AI 擅自改 Key！
-    prompt = f"""
-    請生成 10 題單選題。
-    單元：{episode_name}
-    難度：{diff_prompt}
-    教材：{course_content}
-    這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。
-    
-    🚨【極度重要：嚴格 JSON 格式】🚨
-    你輸出的內容必須是純 JSON 陣列，絕對不能包含其他文字或 Markdown 標記（不要輸出 ```json 標籤）。
-    每一題的字典必須完全符合以下 Key 值（嚴禁將 'q' 寫成 'question' 或其他字）：
-    [
-      {{
-        "topic": "知識點名稱",
-        "q": "題目敘述",
-        "options": ["A. 選項1", "B. 選項2", "C. 選項3", "D. 選項4"],
-        "ans": "A",
-        "diag": "詳解說明"
-      }}
-    ]
-    """
+    prompt = f"生成 10 題單選題。單元：{episode_name}。難度：{diff_prompt}。教材：{course_content}。這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。格式：JSON 陣列。"
     
     try:
         response = model.generate_content(prompt)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         quiz_json = json.loads(clean_text)
         
-        # 雙重檢查：確保 AI 真的有乖乖輸出 'q'
+        # 成功拿到新題目後，存入題庫池供下一位同學使用！
+        # ✨ 雙重檢查格式，防止 AI 給變形的 JSON
         if isinstance(quiz_json, list) and len(quiz_json) > 0 and 'q' in quiz_json[0]:
             pool[cache_key] = quiz_json
             save_quiz_pool(pool)
             return quiz_json
-        else:
-            print("⚠️ AI 輸出的 JSON 格式依然錯誤:", clean_text) # 寫在後台 log 方便你看
-            return FALLBACK_QUIZ
-    except Exception as e: 
-        print(f"⚠️ API 呼叫錯誤: {e}")
         return FALLBACK_QUIZ
+    except Exception: return FALLBACK_QUIZ
+
+# 二合一教練分析引擎
+def get_ai_report(player_name, score, mistakes, content):
+    if not st.session_state.user_api_key: return "API金鑰無效", "請檢查金鑰"
+    try:
+        model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
+        prompt = f"球員：{player_name}\n得分：{score}\n錯題：{mistakes}\n教材：{content}\n請一次生成兩個部分，用「===」隔開：\n1. 教練熱血分析\n2. 3點特訓指南"
+        response = model.generate_content(prompt)
+        parts = response.text.split("===")
+        analysis = parts[0] if len(parts) > 0 else response.text
+        guide = parts[1] if len(parts) > 1 else "請參考上述分析進行複習。"
+        return analysis, guide
+    except Exception as e: return f"⚠️ 體力用盡: {e}", "請稍後再試。"
 
 # ==========================================
 # --- 7. [介面路由] 球員報到 ---
@@ -189,7 +198,7 @@ if st.session_state.app_phase == "checkin":
             else: st.error("🚨 必須輸入 API 金鑰！")
 
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 (補回修改按鈕！) ---
+# --- 8. [介面路由] 賽季大廳 ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -201,7 +210,7 @@ elif st.session_state.app_phase == "lobby":
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
-        # 🛡️ 把遺失的修改按鈕補回來了！
+        # 🛡️ 修改資料按鈕
         with st.expander("⚙️ 報到資料修改 (點此修正班級座號)"):
             st.write("如果剛才選錯了班級座號，可以在這裡修正：")
             grades = ["國七", "國八", "國九"]
@@ -225,6 +234,7 @@ elif st.session_state.app_phase == "lobby":
         
         st.write("<br>", unsafe_allow_html=True)
         if st.button("⚾ Play Ball! (全自動智慧出題)", use_container_width=True, type="primary"):
+            # ✨ 自動追蹤該球員在此單元難度的挑戰次數
             track_key = f"{selected_ep}_{selected_diff}"
             st.session_state.attempt_tracker[track_key] = st.session_state.attempt_tracker.get(track_key, 0) + 1
             
@@ -232,11 +242,11 @@ elif st.session_state.app_phase == "lobby":
             st.session_state.current_difficulty = selected_diff
             st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
             
-            st.session_state.quiz_data = [] 
+            st.session_state.quiz_data = [] # 清空舊題目，觸播quiz區生成新題
             st.session_state.app_phase = "quiz"
             st.rerun()
             
-        # 🛡️ 把遺失的登出按鈕也補回來了！
+        # 🔌 登出按鈕
         if st.button("🔌 離開球場 (清除資料與金鑰)", use_container_width=True):
             st.session_state.clear()
             st.rerun()
@@ -258,29 +268,31 @@ elif st.session_state.app_phase == "quiz":
     with col_r:
         if not st.session_state.quiz_data:
             with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
+                # ✨ 將挑戰次數傳入，決定撈哪一份考卷
                 st.session_state.quiz_data = get_quiz_data(ep_name, diff_name, attempt_num)
                 st.rerun()
                 
         if st.session_state.quiz_data:
             with st.form("quiz_form"):
                 for i, q in enumerate(st.session_state.quiz_data):
-                    # ✨ 防呆機制：檢查 'q' 這個 key 是否存在
+                    # ✨ 增強防呆：確保每一題都有 'q' 這個 key
                     if isinstance(q, dict) and 'q' in q:
                         st.markdown(f"**Q{i+1}: {q['q']}**")
                         # 確保 options 也存在
                         opts = q.get('options', ["A", "B", "C", "D"])
                         st.session_state.user_ans[i] = st.radio(f"Q{i}_options", opts, key=f"q_{i}", label_visibility="collapsed")
                     else:
-                        st.error(f"⚠️ 第 {i+1} 題資料格式不完全，請嘗試『重新整隊』或『回到大廳』。")
+                        st.error(f"⚠️ 第 {i+1} 題資料格式不完全，請嘗試回到大廳再次進入。")
                     st.write("---")
                 if st.form_submit_button("🏁 提交看分析"):
                     st.session_state.app_phase = "dashboard"
                     st.rerun()
 
 # ==========================================
-# --- 10. [介面路由] 學習儀表板 (視覺復刻巔峰版) ---
+# --- 10. [介面路由] 學習儀表板 (終極復刻視覺版) ---
 # ==========================================
 elif st.session_state.app_phase == "dashboard":
+    # 建立上方標題區 (復刻 Image 10)
     st.markdown(f"<h1 style='text-align: center; color: #1e293b;'>🧪 {st.session_state.current_episode}</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #64748b;'>診斷結果已產生，請查看下方的戰術分析</p>", unsafe_allow_html=True)
     st.write("---")
@@ -289,7 +301,7 @@ elif st.session_state.app_phase == "dashboard":
     total_q = len(st.session_state.quiz_data)
     mistakes_for_ai = ""
     
-    # 統計對錯邏輯 (同樣加上 Key 檢查)
+    # 計算分數邏輯
     for i, q in enumerate(st.session_state.quiz_data):
         user_choice = st.session_state.user_ans.get(i, "")
         if isinstance(q, dict) and 'ans' in q:
@@ -301,73 +313,103 @@ elif st.session_state.app_phase == "dashboard":
 
     rate = int(correct_count/total_q*100) if total_q > 0 else 0
     
-    # 復刻漂亮的數據大卡片
-    st.markdown(f"""
-        <div style="display: flex; justify-content: space-between; gap: 15px; margin-bottom: 25px;">
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: center;">
-                <p style="color: #64748b; font-size: 14px; margin-bottom: 5px;">分數</p>
-                <p style="font-size: 36px; font-weight: 800; color: #1e293b; margin: 0;">{correct_count}/{total_q}</p>
+    # ⚽ 核心數據大卡片 (完美復刻 Image 10 的三個灰盒)
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        st.markdown(f"""
+            <div class='stat-box'>
+                <p class='stat-label'>分數</p>
+                <p class='stat-value'>{correct_count} / {total_q}</p>
             </div>
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: center;">
-                <p style="color: #64748b; font-size: 14px; margin-bottom: 5px;">正確率</p>
-                <p style="font-size: 36px; font-weight: 800; color: #1e293b; margin: 0;">{rate}%</p>
+        """, unsafe_allow_html=True)
+    with col_s2:
+        st.markdown(f"""
+            <div class='stat-box'>
+                <p class='stat-label'>正確率</p>
+                <p class='stat-value'>{rate}%</p>
             </div>
-            <div style="flex: 1; background-color: #f1f5f9; padding: 20px; border-radius: 15px; text-align: left;">
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>正確</b> <span style="float: right;">{correct_count}</span></p>
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>錯誤</b> <span style="float: right;">{total_q - correct_count}</span></p>
-                <p style="color: #1e293b; margin: 0; font-size: 14px;"><b>未回答</b> <span style="float: right;">0</span></p>
+        """, unsafe_allow_html=True)
+    with col_s3:
+        st.markdown(f"""
+            <div class='stat-box' style='text-align: left;'>
+                <p class='stat-detail'><b>正確</b> <span style='float: right;'>{correct_count}</span></p>
+                <p class='stat-detail'><b>錯誤</b> <span style='float: right;'>{total_q - correct_count}</span></p>
+                <p class='stat-detail'><b>未回答</b> <span style='float: right;'>0</span></p>
             </div>
-        </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # 復刻 "優勢與精進方向" 區塊
-    st.markdown(f"""
-        <div style="background-color: #f1f5f9; padding: 25px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px;">
-            <div style="display: flex; align-items: center; gap: 20px;">
-                <div style="background-color: #0f172a; width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 30px;">📈</div>
-                <div>
-                    <h4 style="margin: 0; color: #1e293b;">優勢與精進方向</h4>
-                    <p style="margin: 0; color: #64748b; font-size: 14px;">點擊下方按鈕，召喚 AI 教練為你進行深度賽後檢討。</p>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    if not st.session_state.ai_analysis:
-        if st.button("🔍 分析我的學習成效", use_container_width=True, type="primary"):
-            with st.spinner("教練正在調閱比賽錄影帶..."):
-                profile = st.session_state.student_profile
-                p_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
-                analysis, guide = get_ai_report(p_name, f"{correct_count}/{total_q}", mistakes_for_ai, SEASON_1_DB.get(st.session_state.current_episode, ""))
-                st.session_state.ai_analysis = analysis
-                st.session_state.ai_guide = guide
-                st.rerun()
-
-    if st.session_state.ai_analysis:
-        st.markdown("### 📋 繼續學習")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"""
-                <div style="background-color: #fdfcf9; border-left: 4px solid #14b8a6; padding: 20px; border-radius: 0 15px 15px 0; min-height: 200px;">
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 20px;">🌟</span><b>教練熱血分析</b>
-                    </div>
-                    <p style="font-size: 14px; color: #475569; margin-top: 10px; line-height: 1.6;">{st.session_state.ai_analysis}</p>
-                </div>
-            """, unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"""
-                <div style="background-color: #fdfcf9; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 0 15px 15px 0; min-height: 200px;">
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span style="font-size: 20px;">📖</span><b>研讀特訓指南</b>
-                    </div>
-                    <p style="font-size: 14px; color: #475569; margin-top: 10px; line-height: 1.6;">{st.session_state.ai_guide}</p>
-                </div>
-            """, unsafe_allow_html=True)
-
+    # 用一點點距離隔開
     st.write("<br>", unsafe_allow_html=True)
-    if st.button("🔄 回到大廳"):
-        # 清除前一場的分析，避免下一場直接顯示舊資料
+
+    # ⚽ AI 分析診斷 (完美復刻 Image 10 藍色大卡片)
+    col_l1, col_l2, col_l3 = st.columns([1, 4, 1])
+    with col_l2:
+        # 下方藍色卡片容器
+        st.markdown(f"""
+            <div class='analysis-container'>
+                <div style='display: flex; align-items: center; gap: 20px;'>
+                    <div class='analysis-icon'>📈</div>
+                    <div class='analysis-text'>
+                        <h4>優勢與精進方向</h4>
+                        <p>點擊右側按鈕，召喚 AI 教練為你進行深度賽後檢討。</p>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # 將分析按鈕貼在這個區域
+        if not st.session_state.ai_analysis:
+            if st.button("✨ 分析我的學習成效", use_container_width=True, type="primary"):
+                with st.spinner("教練正在調閱比賽錄影帶..."):
+                    profile = st.session_state.student_profile
+                    p_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
+                    analysis, guide = get_ai_report(p_name, f"{correct_count}/{total_q}", mistakes_for_ai, SEASON_1_DB.get(st.session_state.current_episode, ""))
+                    st.session_state.ai_analysis = analysis
+                    st.session_state.ai_guide = guide
+                    st.rerun()
+
+    # ✨ 如果有分析結果，才顯示詳細的分析跟指南
+    if st.session_state.ai_analysis:
+        st.markdown("### 📊 曉臻助教特訓指南")
+        
+        # 復刻 Image 10 下方兩個橫向卡片
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            st.markdown(f"""
+                <div class='learning-card'>
+                    <div class='learning-card-header'>
+                        <div class='learning-card-icon'>🌟</div>
+                        <b>教練熱血分析</b>
+                    </div>
+                    <div class='learning-card-content'>{st.session_state.ai_analysis}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        with col_c2:
+            st.markdown(f"""
+                <div class='learning-card'>
+                    <div class='learning-card-header'>
+                        <div class='learning-card-icon' style='background-color: #065f46;'>📖</div>
+                        <b>研讀特訓指南</b>
+                    </div>
+                    <div class='learning-card-content'>{st.session_state.ai_guide}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+        st.write("<br>", unsafe_allow_html=True)
+        # 用 expander 收納原本嚴肅的解析，保持介面簡潔
+        with st.expander("🔍 檢視原本錯題詳解 (戰術覆盤)"):
+            for i, q in enumerate(st.session_state.quiz_data):
+                if not st.session_state.user_ans.get(i, "").startswith(q.get('ans','無').strip()):
+                    st.markdown(f"**Q{i+1}: {q.get('q','無')}**")
+                    st.error(f"你的答案：{st.session_state.user_ans.get(i, '')}")
+                    st.success(f"正確答案：{q.get('ans','無')}")
+                    st.info(f"💡 診斷：{q.get('diag','無')}")
+                    st.write("---")
+
+    # 底部按鈕區
+    st.write("---")
+    if st.button("🔄 回到大廳 (再次挑戰將產生新卷)"):
+        # 回大廳時清除 AI 分析狀態
         st.session_state.ai_analysis = None
         st.session_state.ai_guide = None
         st.session_state.app_phase = "lobby"
