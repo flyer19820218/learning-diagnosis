@@ -4,15 +4,20 @@ import os
 import time
 
 # ==========================================
-# --- 1. 設定區 (Pro 哥親自操刀) ---
+# --- 1. 設定區 (資安防護升級版) ---
 # ==========================================
-# 🚨 請填入你的真實 API Key
-genai.configure(api_key="AIzaSyDYFN7A7zUwysGO3Mel3NyQO3dyeIO8ajQ")
+# 從環境變數中抓取 API Key (保護你的錢包)
+api_key = os.environ.get("GEMINI_API_KEY")
 
-# 聽教練的話，這次絕對不讓 flash 弟弟來亂，直接上 Pro！
+if not api_key:
+    print("🚨 找不到 API Key！請確認已經設定了環境變數 GEMINI_API_KEY")
+    exit()
+
+genai.configure(api_key=api_key)
+
+# 使用 Pro 哥引擎
 MODEL_ID = 'gemini-2.5-pro'
 
-# 必須把你的 11 大錄音規範也寫進來，不然 Pro 哥出題會忘記格式
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、選項、解析時，必須嚴格遵守以下規範：
 1. 教學內容為台灣地區繁體中文。
