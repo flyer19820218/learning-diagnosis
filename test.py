@@ -1,13 +1,15 @@
 import streamlit as st
 import google.generativeai as genai
 import json
+import pandas as pd
+import plotly.express as px
 import time
 
 # --- 1. 頁面配置：設定為 16:9 寬版佈局 ---
 st.set_page_config(
     page_title="化學大聯盟：適性化診斷系統",
     page_icon="🧪",
-    layout="wide"  # 強制開啟 16:9 寬螢幕模式
+    layout="wide"
 )
 
 # 自定義視覺風格 (CSS)
@@ -32,112 +34,153 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 安全金鑰設定 (使用 Gemini 2.5 Flash) ---
+# --- 2. 安全金鑰設定 ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
     st.error("🚨 找不到 API 金鑰！請在 Streamlit Cloud 的 Settings > Secrets 中設定 GEMINI_API_KEY")
     st.stop()
 
-# 核心模型：使用最強 2.5 Flash
+# 核心模型：使用指定之 2.5 Flash
 MODEL_ID = "gemini-2.5-flash"
 
-# --- 3. 核心教材內容 (化學大聯盟 第一集：電解質) ---
+# --- 3. 核心教材內容 (化學大聯盟) ---
 course_content = """
 【化學大聯盟：第一局戰報】
 1. **電解質的嚴格定義**：
    - 條件一：必須能「溶於水」。
    - 條件二：水溶液必須能「導電」。
-   - *陷阱提醒：金屬（銅線、鐵絲）雖導電但不溶於水，所以金屬「不是」電解質。*
+   - *注意：金屬（銅線、鐵絲）雖導體但不溶於水，故「不是」電解質。*
 
-2. **阿瑞尼斯的解離戰術**：
+2. **阿瑞尼斯的解離說**：
    - 電解質入水後，會拆解成帶正電的「陽離子」與帶負電的「陰離子」。
-   - 靠著這些自由移動的離子，才能傳遞電流。
+   - 靠著自由移動的「離子」傳遞電流，而非質子或電子。
 
 3. **非電解質清單**：
    - 糖水、酒精：溶於水但不解離，所以不導電。
 
 4. **防守陣型：電中性**：
-   - 陽離子總電量 ＝ 陰離子總電量。正負相互抵消，對外不顯電性。
+   - 陽離子總電量 ＝ 陰離子總電量。正負相互抵消，整體不帶電。
 """
 
-# --- 4. AI 出題系統指令 ---
-system_instruction = """
-你是一個台灣國中理化科的專業命題系統。
-請根據教材內容與指定難度，生成一題單選題。
-難度定義如下：
-- C級 (基礎記憶)：直接考名詞定義，無陷阱。
-- B級 (觀念理解)：考概念應用、基礎推論或簡單計算。
-- A級 (精熟推論)：考情境綜合應用、易混淆陷阱題。
+# --- 4. 狀態管理 ---
+if "quiz_list" not in st.session_state:
+    st.session_state.quiz_list = []
+if "user_answers" not in st.session_state:
+    st.session_state.user_answers = {}
+if "is_finished" not in st.session_state:
+    st.session_state.is_finished = False
 
-必須回傳純 JSON 格式：
-{
-    "level": "A或B或C",
-    "question": "題目描述",
-    "options": ["選項A", "選項B", "選項C", "選項D"],
-    "correct_answer": "正確答案完整文字",
-    "rationale": "詳細解析（說明正確原因，並診斷迷思點）"
-}
-"""
-
-model = genai.GenerativeModel(
-    model_name=MODEL_ID,
-    system_instruction=system_instruction,
-    generation_config={"temperature": 0.3, "response_mime_type": "application/json"}
-)
-
-# --- 5. 狀態管理 ---
-if "current_quiz" not in st.session_state:
-    st.session_state.current_quiz = None
-if "is_submitted" not in st.session_state:
-    st.session_state.is_submitted = False
+# --- 5. AI 出題邏輯 (一次生成 10 題) ---
+def generate_10_questions(level, content):
+    system_instruction = f"""
+    你是一個台灣國中理化老師。請根據教材內容一次生成 10 題單選題。
+    難度：{level} (C:基礎, B:理解, A:精熟)。
+    JSON 格式必須是陣列：
+    [
+      {{
+        "id": 1,
+        "topic": "知識點名稱",
+        "question": "題目描述",
+        "options": ["A選項","B選項","C選項","D選項"],
+        "correct": "正確答案文字",
+        "rationale": "深度診斷解析"
+      }}
+    ]
+    """
+    model = genai.GenerativeModel(
+        model_name=MODEL_ID,
+        generation_config={"temperature": 0.4, "response_mime_type": "application/json"}
+    )
+    try:
+        response = model.generate_content(f"{system_instruction}\n教材：{content}")
+        return json.loads(response.text)
+    except:
+        return None
 
 # --- 6. 16:9 介面佈局 ---
 st.title("🧪 化學大聯盟：2.5 Flash 適性化診斷診所")
 
-# 使用 columns 達成 16:9 佈置 (左:右 = 1:1.5)
-col_left, col_right = st.columns([1, 1.5], gap="large")
+col_l, col_r = st.columns([1, 2], gap="large")
 
-with col_left:
-    st.subheader("📖 核心戰報 (教材)")
-    st.markdown(f"<div class='course-box'>{course_content.replace('\\n', '<br>')}</div>", unsafe_allow_html=True)
+with col_l:
+    st.subheader("📖 核心教材複習")
+    st.info(course_content)
     
     st.divider()
-    st.subheader("⚙️ 診斷難度設定")
-    lvl = st.radio("選擇題目難度：", ["C級 (基礎)", "B級 (理解)", "A級 (精熟)"], horizontal=True)
+    st.subheader("⚙️ 測驗設定")
+    difficulty = st.radio("挑戰難度：", ["C級 (基礎)", "B級 (應用)", "A級 (精熟)"], horizontal=True)
     
-    if st.button("🚀 即時生成動態題目"):
-        with st.spinner("AI 正在根據 2.5 Flash 引擎生成題目..."):
-            try:
-                prompt = f"難度：{lvl[0]}級，教材內容：{course_content}"
-                response = model.generate_content(prompt)
-                st.session_state.current_quiz = json.loads(response.text)
-                st.session_state.is_submitted = False
-            except Exception as e:
-                st.error(f"連線失敗：{e}")
+    if st.button("🚀 生成 10 題診斷練習卷"):
+        with st.status("AI 正在針對教材設計題目...", expanded=True) as status:
+            data = generate_10_questions(difficulty[0], course_content)
+            if data:
+                st.session_state.quiz_list = data
+                st.session_state.user_answers = {}
+                st.session_state.is_finished = False
+                status.update(label="✅ 題目準備就緒！", state="complete", expanded=False)
 
-with col_right:
-    if st.session_state.current_quiz:
-        quiz = st.session_state.current_quiz
-        st.subheader(f"📝 測驗階段：等級 {quiz['level']}")
+with col_r:
+    # 情況 A：測驗中
+    if st.session_state.quiz_list and not st.session_state.is_finished:
+        st.subheader(f"✍️ 線上練習 ({difficulty})")
         
-        with st.container():
-            st.markdown(f"#### {quiz['question']}")
-            user_choice = st.radio("請回答：", quiz['options'], key="quiz_ans_radio")
+        for item in st.session_state.quiz_list:
+            st.markdown(f"**Q{item['id']}: {item['question']}**")
+            st.session_state.user_answers[item['id']] = st.radio(
+                f"Q{item['id']} Ans", item['options'], key=f"q_{item['id']}", label_visibility="collapsed"
+            )
+            st.write("")
             
-            if st.button("🏁 提交作答"):
-                st.session_state.is_submitted = True
-                
-            if st.session_state.is_submitted:
-                if user_choice == quiz['correct_answer']:
-                    st.success("🎉 觀念正確！你已經掌握了這個知識點。")
-                else:
-                    st.error(f"❌ 答錯了！正確答案是：{quiz['correct_answer']}")
-                
-                with st.expander("🩺 查看深度診斷分析"):
-                    st.info(f"**AI 診斷建議：**\n\n{quiz['rationale']}")
-    else:
-        st.info("👈 請閱讀左側教材後，點擊按鈕開啟你的診斷測驗。")
+        if st.button("🏁 完成測驗並產出分析報告"):
+            st.session_state.is_finished = True
+            st.rerun()
 
-st.markdown("---")
-st.caption("⚡ Powered by Gemini 2.5 Flash | 預防死背答案，提升實戰力")
+    # 情況 B：顯示診斷報告
+    elif st.session_state.is_finished:
+        st.subheader("🩺 專屬學習診斷報告")
+        
+        correct_num = 0
+        topic_map = {}
+        
+        for item in st.session_state.quiz_list:
+            u_ans = st.session_state.user_answers.get(item['id'])
+            is_ok = (u_ans == item['correct'])
+            if is_ok: correct_num += 1
+            
+            # 統計各知識點
+            tp = item['topic']
+            if tp not in topic_map: topic_map[tp] = {"ok": 0, "total": 0}
+            topic_map[tp]["total"] += 1
+            if is_ok: topic_map[tp]["ok"] += 1
+
+        # 成績指標
+        score = (correct_num / 10) * 100
+        c1, c2 = st.columns(2)
+        with c1: st.metric("總得分", f"{score:.0f} 分", f"答對 {correct_num} 題")
+        with c2: st.progress(score/100)
+
+        # 知識點分析圖
+        st.write("#### 📊 知識點掌握度分析")
+        chart_df = pd.DataFrame([
+            {"知識點": k, "正確率": (v["ok"]/v["total"])*100} for k, v in topic_map.items()
+        ])
+        fig = px.bar(chart_df, x="知識點", y="正確率", text="正確率", color="正確率", color_continuous_scale="Teal")
+        st.plotly_chart(fig, use_container_width=True)
+
+        # 錯題解析
+        st.write("#### 🔍 深度盲點解析")
+        for item in st.session_state.quiz_list:
+            u_ans = st.session_state.user_answers.get(item['id'])
+            is_ok = (u_ans == item['correct'])
+            with st.expander(f"{'✅' if is_ok else '❌'} 第 {item['id']} 題分析"):
+                if not is_ok:
+                    st.write(f"**正確答案：** {item['correct']}")
+                st.info(f"**AI 診斷：**\n{item['rationale']}")
+        
+        if st.button("🔄 重新挑戰"):
+            st.session_state.quiz_list = []
+            st.session_state.is_finished = False
+            st.rerun()
+    else:
+        st.info("👈 請閱讀教材並點擊左側按鈕生成考卷。")
