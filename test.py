@@ -104,7 +104,7 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. AI 出題引擎 (自動版控機制) ---
+# --- 6. AI 出題引擎 (終極嚴格版控機制) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
@@ -121,32 +121,44 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
     
-    prompt = f"生成 10 題單選題。單元：{episode_name}。難度：{diff_prompt}。教材：{course_content}。這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。格式：JSON 陣列。"
+    # ✨ 終極嚴格的 Prompt：直接給模板，嚴禁 AI 擅自改 Key！
+    prompt = f"""
+    請生成 10 題單選題。
+    單元：{episode_name}
+    難度：{diff_prompt}
+    教材：{course_content}
+    這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。
+    
+    🚨【極度重要：嚴格 JSON 格式】🚨
+    你輸出的內容必須是純 JSON 陣列，絕對不能包含其他文字或 Markdown 標記（不要輸出 ```json 標籤）。
+    每一題的字典必須完全符合以下 Key 值（嚴禁將 'q' 寫成 'question' 或其他字）：
+    [
+      {{
+        "topic": "知識點名稱",
+        "q": "題目敘述",
+        "options": ["A. 選項1", "B. 選項2", "C. 選項3", "D. 選項4"],
+        "ans": "A",
+        "diag": "詳解說明"
+      }}
+    ]
+    """
     
     try:
         response = model.generate_content(prompt)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         quiz_json = json.loads(clean_text)
         
-        if isinstance(quiz_json, list) and len(quiz_json) > 0:
+        # 雙重檢查：確保 AI 真的有乖乖輸出 'q'
+        if isinstance(quiz_json, list) and len(quiz_json) > 0 and 'q' in quiz_json[0]:
             pool[cache_key] = quiz_json
             save_quiz_pool(pool)
             return quiz_json
+        else:
+            print("⚠️ AI 輸出的 JSON 格式依然錯誤:", clean_text) # 寫在後台 log 方便你看
+            return FALLBACK_QUIZ
+    except Exception as e: 
+        print(f"⚠️ API 呼叫錯誤: {e}")
         return FALLBACK_QUIZ
-    except Exception: return FALLBACK_QUIZ
-
-# 二合一教練分析引擎
-def get_ai_report(player_name, score, mistakes, content):
-    if not st.session_state.user_api_key: return "API金鑰無效", "請檢查金鑰"
-    try:
-        model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
-        prompt = f"球員：{player_name}\n得分：{score}\n錯題：{mistakes}\n教材：{content}\n請一次生成兩個部分，用「===」隔開：\n1. 教練熱血分析\n2. 3點特訓指南"
-        response = model.generate_content(prompt)
-        parts = response.text.split("===")
-        analysis = parts[0] if len(parts) > 0 else response.text
-        guide = parts[1] if len(parts) > 1 else "請參考上述分析進行複習。"
-        return analysis, guide
-    except Exception as e: return f"⚠️ 體力用盡: {e}", "請稍後再試。"
 
 # ==========================================
 # --- 7. [介面路由] 球員報到 ---
