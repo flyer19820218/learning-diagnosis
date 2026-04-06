@@ -1,43 +1,45 @@
 import streamlit as st
 import google.generativeai as genai
+import plotly.graph_objects as go
 import json
+import time
 
-# --- 1. 系統與視覺初始化 (NotebookLM 風格) ---
-st.set_page_config(page_title="化學大聯盟：智能儀表板", page_icon="📚", layout="centered")
+# --- 1. 系統與視覺初始化 (精緻 NotebookLM 風格) ---
+st.set_page_config(page_title="化學大聯盟：專屬儀表板", page_icon="🎓", layout="wide")
 
 st.markdown("""
     <style>
     :root { color-scheme: light; }
-    body { background-color: #ffffff; color: #202124; font-family: 'PingFang TC', sans-serif; }
+    body { background-color: #ffffff; color: #202124; font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
     
-    .nl-card { background-color: #f0f4f9; border-radius: 16px; padding: 24px; height: 100%; }
-    .nl-card-title { font-size: 14px; color: #5f6368; margin-bottom: 8px; }
-    .nl-card-value { font-size: 48px; font-weight: 500; color: #202124; line-height: 1.2; }
-    .nl-stat-row { display: flex; justify-content: space-between; font-size: 16px; color: #202124; margin-bottom: 4px; }
+    /* 圓角主灰底卡片 (對應測驗結果大框) */
+    .main-card { background-color: #f8f9fa; border-radius: 24px; padding: 32px; margin-bottom: 24px; }
     
-    .nl-action-card {
-        background-color: #f0f4f9; border-radius: 16px; padding: 24px;
-        display: flex; align-items: flex-start; gap: 20px; margin: 20px 0;
-    }
-    .nl-action-icon {
-        width: 64px; height: 64px; border-radius: 16px; background-color: #1e293b; 
-        display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0;
-    }
-    .nl-action-text h4 { margin: 0 0 8px 0; font-size: 16px; font-weight: 500; color: #202124; }
-    .nl-action-text p { margin: 0; font-size: 14px; color: #5f6368; line-height: 1.5; }
+    /* 文字排版 */
+    .dashboard-title { font-size: 32px; font-weight: 500; color: #202124; margin-bottom: 24px; }
+    .stat-label { font-size: 16px; color: #5f6368; }
+    .stat-value { font-size: 24px; font-weight: 600; color: #14b8a6; text-align: right; }
+    .stat-value-wrong { font-size: 24px; font-weight: 600; color: #202124; text-align: right; }
     
+    /* 區塊標題 */
+    .section-title { font-size: 22px; font-weight: 500; color: #202124; margin-bottom: 16px; }
+    
+    /* 列表樣式 */
+    .topic-list { color: #3c4043; line-height: 2; font-size: 16px; }
+    
+    /* 按鈕優化 */
     .stButton>button {
-        background-color: #c2e7ff; color: #001d35; border-radius: 20px; border: none;
-        padding: 8px 24px; font-weight: 500; font-size: 14px; transition: all 0.2s;
+        background-color: #e8f0fe; color: #1967d2; border-radius: 20px; border: none;
+        padding: 10px 24px; font-weight: 600; font-size: 15px; transition: all 0.2s; width: 100%;
     }
-    .stButton>button:hover { background-color: #b3dcf6; color: #001d35; }
+    .stButton>button:hover { background-color: #d2e3fc; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3); }
     
-    /* 分析報告框 */
-    .analysis-box { background-color: #f8f9fa; border-left: 4px solid #14b8a6; padding: 20px; border-radius: 0 12px 12px 0; margin-top: 15px;}
+    /* AI 生成內容區塊 */
+    .ai-box { background-color: #ffffff; border: 1px solid #e8eaed; border-radius: 16px; padding: 24px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. API 配置 (鎖定你指定的 2.5 Flash) ---
+# --- 2. API 配置 ---
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -46,101 +48,123 @@ else:
 
 MODEL_ID = "gemini-2.5-flash"
 
-# --- 3. 模擬數據與講義 (為了讓你直接看儀表板效果) ---
+# --- 3. 核心講義與模擬錯題 (供 AI 分析使用) ---
 course_content = """
 1. 電解質定義：須滿足「溶於水」且「水溶液能導電」。金屬不溶於水，非電解質。
 2. 阿瑞尼斯解離說：電解質入水後拆解成陽離子與陰離子，靠離子移動導電。
 3. 電中性原則：陽離子總電量等於陰離子總電量，溶液整體不帶電。
-4. 常見非電解質：糖水、酒精，溶於水但不解離。
 """
+mock_mistakes = "學生將『銅線』誤認為電解質；且認為『pH=7』才符合電中性原則。"
 
-# 假裝學生錯了這些題目
-mock_mistakes = """
-1. 學生以為「銅線能導電，所以是電解質」 (錯在忽略了需溶於水)
-2. 學生以為「溶液pH=7才叫電中性」 (錯在電中性是指正負電量抵消)
-3. 學生以為「酒精溶於水會解離」 (酒精是非電解質不解離)
-"""
-
-# --- 4. 狀態管理 (儲存 AI 生成的結果，避免按鈕重整消失) ---
+# --- 4. 狀態管理 ---
+if "app_phase" not in st.session_state: st.session_state.app_phase = "home"
 if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
-if "ai_flashcards" not in st.session_state: st.session_state.ai_flashcards = None
+if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
+if "ai_cards" not in st.session_state: st.session_state.ai_cards = None
 
-# --- 5. AI 呼叫函數 ---
-def get_analysis_from_gemini():
-    model = genai.GenerativeModel(MODEL_ID)
-    prompt = f"學生剛完成化學測驗，得 3/10 分。他錯了以下觀念：\n{mock_mistakes}\n請以老師口吻，寫一段大約 150 字的「優勢與精進方向」分析報告，語氣要溫暖鼓勵，條理分明。"
-    res = model.generate_content(prompt)
-    return res.text
-
-def get_flashcards_from_gemini():
-    model = genai.GenerativeModel(
-        model_name=MODEL_ID,
-        generation_config={"response_mime_type": "application/json", "temperature": 0.3}
-    )
-    prompt = f"""根據以下教材，生成 6 張精華學習卡 (Flashcards) 以便快速複習。
-    回傳格式必須是 JSON 陣列：
-    [ {{"front": "正面提問或名詞", "back": "背面解答或解釋"}} ]
-    教材：{course_content}"""
-    res = model.generate_content(prompt)
-    return json.loads(res.text)
+# --- 5. AI 生成函數 (強大火力全開) ---
+def generate_content(prompt_type):
+    model = genai.GenerativeModel(MODEL_ID, generation_config={"temperature": 0.5})
+    
+    if prompt_type == "analysis":
+        prompt = f"學生在化學測驗得 20 分。錯題盲點：{mock_mistakes}。請以資深理化老師的口吻，寫出約 200 字的「學習優勢與精進方向」，用 Markdown 排版，語氣鼓勵。"
+        return model.generate_content(prompt).text
+        
+    elif prompt_type == "guide":
+        prompt = f"根據學生的錯題盲點：{mock_mistakes}，以及教材：{course_content}。請為他量身打造一份「3步研讀指南」，告訴他具體該怎麼複習，用 Markdown 排版。"
+        return model.generate_content(prompt).text
+        
+    elif prompt_type == "cards":
+        model_json = genai.GenerativeModel(MODEL_ID, generation_config={"response_mime_type": "application/json", "temperature": 0.3})
+        prompt = f"針對學生的盲點：{mock_mistakes}，生成 4 張專屬補救學習卡。回傳 JSON 陣列：[{{'front': '正面問題', 'back': '背面解答'}}]"
+        return json.loads(model_json.generate_content(prompt).text)
 
 # ==========================================
-# 介面渲染區
+# 介面路由：首頁 (快速進入測試)
 # ==========================================
-st.caption("📚 化學大聯盟：電解質概念診斷")
-st.markdown("<h2 style='font-weight: 400; margin-top: 10px; margin-bottom: 30px;'>太棒了，你完成了測驗！</h2>", unsafe_allow_html=True)
+if st.session_state.app_phase == "home":
+    st.title("🧪 化學大聯盟：學習系統")
+    st.write("正常流程這裡會是 10 題測驗，為了方便老師檢視，請直接點擊下方按鈕進入儀表板。")
+    if st.button("🚀 開發者測試：直接跳轉至「測驗結果儀表板」"):
+        st.session_state.app_phase = "dashboard"
+        st.rerun()
 
-# --- 頂部三大分數卡片 ---
-col1, col2, col3 = st.columns(3)
-with col1: st.markdown("<div class='nl-card'><div class='nl-card-title'>分數</div><div class='nl-card-value'>3/10</div></div>", unsafe_allow_html=True)
-with col2: st.markdown("<div class='nl-card'><div class='nl-card-title'>正確率</div><div class='nl-card-value'>30%</div></div>", unsafe_allow_html=True)
-with col3: st.markdown("<div class='nl-card' style='display: flex; flex-direction: column; justify-content: center;'><div class='nl-stat-row'><span>正確</span><strong>3</strong></div><div class='nl-stat-row'><span>錯誤</span><strong>7</strong></div><div class='nl-stat-row'><span>未回答</span><strong>0</strong></div></div>", unsafe_allow_html=True)
+# ==========================================
+# 介面路由：終極儀表板 (神還原 NotebookLM)
+# ==========================================
+elif st.session_state.app_phase == "dashboard":
+    
+    st.markdown("<div class='dashboard-title'>太棒了，完成測驗了！</div>", unsafe_allow_html=True)
+    
+    # --- 頂部大卡片：分數與甜甜圈圖 ---
+    st.markdown("<div class='main-card'>", unsafe_allow_html=True)
+    col_chart, col_stats = st.columns([1, 1.5])
+    
+    with col_chart:
+        # 使用 Plotly 畫出和 NotebookLM 一模一樣的粗邊甜甜圈圖
+        fig = go.Figure(data=[go.Pie(labels=['答對', '答錯'], values=[2, 8], hole=0.75, 
+                                     marker_colors=['#14b8a6', '#202124'], textinfo='none')])
+        fig.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10), height=220, 
+                          annotations=[dict(text='2/10<br><span style="font-size:16px; color:#5f6368">20%</span>', x=0.5, y=0.5, font_size=32, showarrow=False)])
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        
+    with col_stats:
+        st.write("<br><br>", unsafe_allow_html=True) # 垂直置中微調
+        c1, c2 = st.columns(2)
+        with c1: st.markdown("<div class='stat-label'>答對<br>題數</div>", unsafe_allow_html=True)
+        with c2: st.markdown("<div class='stat-value'>2</div>", unsafe_allow_html=True)
+        st.divider()
+        c3, c4 = st.columns(2)
+        with c3: st.markdown("<div class='stat-label'>答錯<br>題數</div>", unsafe_allow_html=True)
+        with c4: st.markdown("<div class='stat-value-wrong'>8</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # --- 下方雙欄：涵蓋主題 vs 學無止境 ---
+    col_left, col_right = st.columns([1, 1.2], gap="large")
+    
+    with col_left:
+        st.markdown("<div class='main-card' style='height: 100%;'>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>涵蓋的主題</div>", unsafe_allow_html=True)
+        st.markdown("""
+        <ul class='topic-list'>
+            <li>電解質的定義與判定</li>
+            <li>阿瑞尼斯解離說</li>
+            <li>電中性原理</li>
+            <li>電解質的移動方向與導電機制</li>
+        </ul>
+        """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    with col_right:
+        st.markdown("<div class='main-card' style='height: 100%; background-color: #f0f4f9;'>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>學無止境 (AI 專屬擴充)</div>", unsafe_allow_html=True)
+        st.write("可選取下方的 AI 功能，生成針對你弱點的新教材。")
+        
+        # --- 按鈕 1：AI 學習成效分析 ---
+        if st.button("📊 深度分析我的學習成效"):
+            with st.spinner("Gemini 正在分析盲點..."):
+                st.session_state.ai_analysis = generate_content("analysis")
+        if st.session_state.ai_analysis:
+            st.markdown(f"<div class='ai-box'>✨ <strong>AI 診斷：</strong><br>{st.session_state.ai_analysis}</div>", unsafe_allow_html=True)
 
-# --- 區塊 1：學習成效分析 ---
-st.markdown("""
-    <div class="nl-action-card">
-        <div class="nl-action-icon" style="background-color: #1a233a;">📈</div>
-        <div class="nl-action-text" style="flex-grow: 1;">
-            <h4>優勢和精進方向</h4>
-            <p>查看摘要，瞭解自己的主要優勢，以及可加強學習的部分。</p>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-col_spacer1, col_btn1 = st.columns([3, 1.5])
-with col_btn1:
-    if st.button("✨ 呼叫 AI 分析學習成效", use_container_width=True):
-        with st.spinner("Gemini 正在分析你的錯題..."):
-            st.session_state.ai_analysis = get_analysis_from_gemini()
-
-# 顯示生成的分析報告
-if st.session_state.ai_analysis:
-    st.markdown(f"<div class='analysis-box'><strong>🤖 AI 專屬診斷報告：</strong><br><br>{st.session_state.ai_analysis}</div>", unsafe_allow_html=True)
-
-# --- 區塊 2：繼續學習 (學習卡) ---
-st.markdown("<h3 style='font-weight: 400; margin-top: 40px; margin-bottom: 20px;'>繼續學習</h3>", unsafe_allow_html=True)
-
-st.markdown("""
-    <div class="nl-action-card" style="margin-top: 0;">
-        <div class="nl-action-icon" style="background-color: #262338;">📇</div>
-        <div class="nl-action-text" style="flex-grow: 1;">
-            <h4>動態學習卡</h4>
-            <p>根據所有測驗教材，建立全套學習卡，以便快速複習及掌握重要概念。</p>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-col_spacer2, col_btn2 = st.columns([3, 1.5])
-with col_btn2:
-    if st.button("✨ 生成 6 張核心學習卡", use_container_width=True):
-        with st.spinner("Gemini 正在為你提煉學習卡..."):
-            st.session_state.ai_flashcards = get_flashcards_from_gemini()
-
-# 顯示生成的學習卡 (使用漂亮的 Expander)
-if st.session_state.ai_flashcards:
-    st.markdown("#### 🗂️ 你的專屬複習卡包")
-    cols = st.columns(3)
-    for idx, card in enumerate(st.session_state.ai_flashcards):
-        with cols[idx % 3]:
-            with st.expander(f"📌 {card.get('front', '正面')}"):
-                st.write(card.get('back', '背面說明'))
+        # --- 按鈕 2：AI 研讀指南 ---
+        st.write("") # 間距
+        if st.button("📖 產生量身打造的研讀指南"):
+            with st.spinner("Gemini 正在編寫指南..."):
+                st.session_state.ai_guide = generate_content("guide")
+        if st.session_state.ai_guide:
+            st.markdown(f"<div class='ai-box'>🗺️ <strong>專屬指南：</strong><br>{st.session_state.ai_guide}</div>", unsafe_allow_html=True)
+            
+        # --- 按鈕 3：AI 學習卡 ---
+        st.write("") # 間距
+        if st.button("📇 產生錯題補救學習卡"):
+            with st.spinner("Gemini 正在製作卡片..."):
+                st.session_state.ai_cards = generate_content("cards")
+        if st.session_state.ai_cards:
+            st.markdown("<div class='ai-box'>🗂️ <strong>翻轉學習卡：</strong>", unsafe_allow_html=True)
+            for card in st.session_state.ai_cards:
+                with st.expander(f"📌 {card['front']}"):
+                    st.success(card['back'])
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        st.markdown("</div>", unsafe_allow_html=True)
