@@ -24,8 +24,8 @@ else:
     st.error("🚨 找不到 API 金鑰！請在 Secrets 中設定 GEMINI_API_KEY")
     st.stop()
 
-# 模型 ID（請確保這是你測試過可以動的那一個名稱，例如 gemini-1.5-flash）
-MODEL_ID = "gemini-1.5-flash" 
+# 模型 ID（請確保這是你測試過可以動的那一個名稱，例如 gemini-2.5-flash）
+MODEL_ID = "gemini-2.5-flash" 
 
 # --- 3. 教材內容 ---
 course_content = """
