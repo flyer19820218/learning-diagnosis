@@ -106,7 +106,7 @@ def get_quiz_data(episode_name, difficulty_key):
     except Exception: return FALLBACK_QUIZ
 
 # ==========================================
-# --- 7. [介面路由] 登入頁面 (機密版) ---
+# --- 7. [介面路由] 登入頁面 (機密版 + API申請連結) ---
 # ==========================================
 if st.session_state.app_phase == "login":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -132,7 +132,11 @@ if st.session_state.app_phase == "login":
         
         st.write("<br>", unsafe_allow_html=True)
         st.markdown("#### 🔑 裝備驗證 (API 金鑰)")
-        api_input = st.text_input("輸入 Gemini API 金鑰", type="password")
+        api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="請輸入以 AIza 開頭的金鑰...")
+        
+        # 💡 把你千叮嚀萬交代的重要連結補回來啦！
+        st.caption("💡 新球員？ [點此前往 Google AI Studio 申請免費金鑰](https://aistudio.google.com/app/apikey) (每天享免費 20 次額度)")
+        st.write("<br>", unsafe_allow_html=True)
         
         if st.button("🚀 登入大廳", use_container_width=True):
             if api_input.strip():
