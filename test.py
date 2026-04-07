@@ -10,7 +10,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 標題與內文同步放大) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -22,16 +22,16 @@ st.markdown("""
     /* 復刻數據大卡片樣式 */
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
     .stat-label { color: #64748b; font-size: 16px; margin-bottom: 5px; text-align: center;}
-    .stat-value { font-size: 36px; font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
+    .stat-value { font-size: clamp(28px, 3vw, 36px); font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
     .stat-detail { color: #0f172a; margin: 0; font-size: 15px; line-height: 1.8;}
     
-    /* 復刻藍色分析大卡片 */
+    /* ✨ 統一第三頁：藍色分析大卡片 (與下方卡片字體同步) */
     .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
     .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
-    .analysis-text h4 { margin: 0; color: #1e293b; font-size: 20px; }
-    .analysis-text p { margin: 0; color: #64748b; font-size: 16px; }
+    .analysis-text h4 { margin: 0; color: #1e293b; font-size: clamp(20px, 2.5vw, 28px); font-weight: bold; }
+    .analysis-text p { margin: 0; color: #64748b; font-size: clamp(17px, 1.8vw, 24px); margin-top: 5px; }
     
-    /* 復刻下方學習卡片 */
+    /* ✨ 統一第三頁：下方學習卡片 */
     .learning-card { 
         background-color: #fdfcf9; 
         padding: 24px; 
@@ -41,27 +41,26 @@ st.markdown("""
         margin-bottom: 20px; 
         border: 1px solid #e5e7eb;
     }
-    
-    /* ✨ 標題區塊升級：圖示與文字間距拉開 */
     .learning-card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-    
-    /* ✨ 圖示稍微放大，配合大標題 */
     .learning-card-icon { background-color: #1e293b; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px;}
-    
-    /* ✨ 標題魔法：手機20px，平板/電腦最高放大到30px！ */
-    .learning-card-header b { font-size: clamp(20px, 2.5vw, 30px); color: #1e293b; } 
-    
-    /* 內文魔法：手機維持17px，平板與電腦最高可放大到26px！ */
+    .learning-card-header b { font-size: clamp(20px, 2.5vw, 28px); color: #1e293b; } 
     .learning-card-content { 
-        font-size: clamp(17px, 2.0vw, 26px); 
+        font-size: clamp(17px, 1.8vw, 24px); 
         color: #334155; 
         line-height: 1.8;
         letter-spacing: 0.5px;
         text-align: justify; 
     }
     
-    /* 視覺基礎 */
-    .stMarkdown p { line-height: 1.8; font-size: 16px; }
+    /* ✨ 魔法升級：第二頁 (測驗與講義) 字體全面放大 30%！ */
+    .stMarkdown p, .stMarkdown li { 
+        font-size: clamp(18px, 1.5vw, 22px) !important; 
+        line-height: 1.8; 
+    }
+    /* 針對選擇題的選項進行放大 */
+    div[role="radiogroup"] label p { 
+        font-size: clamp(18px, 1.5vw, 22px) !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 MODEL_ID = "gemini-2.5-flash"
