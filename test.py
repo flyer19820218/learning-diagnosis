@@ -3,15 +3,15 @@
 # ==========================================
 import streamlit as st
 import google.generativeai as genai
-import plotly.graph_objects as go
 import json
 import os 
+import re
 import pandas as pd
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="化學大聯盟：雲端診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
 # --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大) ---
@@ -22,64 +22,35 @@ st.markdown("""
     html, body, .stApp, p, h1, h2, h3, h4, h5, h6, li {
         font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
-    
-    /* 復刻數據大卡片樣式 */
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
     .stat-label { color: #64748b; font-size: 16px; margin-bottom: 5px; text-align: center;}
     .stat-value { font-size: clamp(28px, 3vw, 36px); font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
     .stat-detail { color: #0f172a; margin: 0; font-size: 15px; line-height: 1.8;}
-    
-    /* ✨ 統一第三頁：藍色分析大卡片 */
     .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
     .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
     .analysis-text h4 { margin: 0; color: #1e293b; font-size: clamp(20px, 2.5vw, 28px); font-weight: bold; }
     .analysis-text p { margin: 0; color: #64748b; font-size: clamp(17px, 1.8vw, 24px); margin-top: 5px; }
-    
-    /* ✨ 統一第三頁：下方學習卡片 */
-    .learning-card { 
-        background-color: #fdfcf9; 
-        padding: 24px; 
-        border-radius: 12px; 
-        min-height: 180px; 
-        height: auto;      
-        margin-bottom: 20px; 
-        border: 1px solid #e5e7eb;
-    }
+    .learning-card { background-color: #fdfcf9; padding: 24px; border-radius: 12px; min-height: 180px; height: auto; margin-bottom: 20px; border: 1px solid #e5e7eb; }
     .learning-card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .learning-card-icon { background-color: #1e293b; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px;}
     .learning-card-header b { font-size: clamp(20px, 2.5vw, 28px); color: #1e293b; } 
-    .learning-card-content { 
-        font-size: clamp(17px, 1.8vw, 24px); 
-        color: #334155; 
-        line-height: 1.8;
-        letter-spacing: 0.5px;
-        text-align: justify; 
-    }
-    
-    /* ✨ 魔法升級：第二頁 (測驗與講義) 字體全面放大 30%！ */
-    .stMarkdown p, .stMarkdown li { 
-        font-size: clamp(18px, 1.5vw, 22px) !important; 
-        line-height: 1.8; 
-    }
-    /* 針對選擇題的選項進行放大 */
-    div[role="radiogroup"] label p { 
-        font-size: clamp(18px, 1.5vw, 22px) !important; 
-    }
+    .learning-card-content { font-size: clamp(17px, 1.8vw, 24px); color: #334155; line-height: 1.8; letter-spacing: 0.5px; text-align: justify; }
+    .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
+    div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
     </style>
 """, unsafe_allow_html=True)
 
+# ==========================================
+# --- 3. 系統常數與提示詞 ---
+# ==========================================
 MODEL_ID = "gemini-2.5-flash"
 
-# ==========================================
-# --- 3. 系統提示詞設定 ---
-# ==========================================
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
 1. 教學內容為台灣地區繁體中文，針對國中學生。
-2. 【視覺排版規範】：文字顯示必須使用 Markdown 語法排版。化學式請務必使用標準符號（如 $H_2SO_4$）。
-3. 棒球術語不可加「第」，請用「x局上半」或「y局下半」來稱呼章節。
-4. 扮演曉臻助教或給予提示時，避免使用語助詞（喔、呢、吧），改用加強語氣的肯定句。
-5. 🚨【科學嚴謹性防護（極重要）】：扮演棒球教練時，棒球術語僅限於「語氣鼓勵」、「開場白」與「流程引導」。絕對禁止將化學專有名詞強行比喻為棒球術語（例如嚴禁將打擊率比喻為濃度）。解釋化學觀念時必須 100% 保持理化老師的科學嚴謹與準確性。
+2. 文字顯示必須使用 Markdown 語法排版。化學式請務必使用標準符號（如 $H_2SO_4$）。
+3. 扮演曉臻助教或給予提示時，改用加強語氣的肯定句。
+4. 解釋化學觀念時必須 100% 保持理化老師的科學嚴謹與準確性。
 """
 
 DIFFICULTY_LEVELS = {
@@ -89,7 +60,7 @@ DIFFICULTY_LEVELS = {
 }
 
 FALLBACK_QUIZ = [
-    {"topic": "系統防護", "q": "目前 API 額度過載，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
+    {"topic": "系統防護", "q": "目前 API 額度過載或金庫毀損，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
 
 # ==========================================
@@ -98,7 +69,6 @@ FALLBACK_QUIZ = [
 os.makedirs("data", exist_ok=True)
 QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
 
-# --- Google Sheets 雲端引擎 ---
 @st.cache_resource
 def get_gsheet_client():
     """建立與 Google Sheets 的安全連線"""
@@ -140,16 +110,17 @@ def get_cloud_passwords():
     try:
         sh = client.open_by_key(st.secrets["GSHEET_ID"])
         data = sh.worksheet("學生密碼").get_all_records()
-        # 將學號與密碼轉為字串對應字典
         return {str(row['學號']): str(row['密碼']) for row in data}
     except: return {}
 
-# --- 本機題庫與講義載入 ---
 def load_quiz_pool():
     if os.path.exists(QUIZ_POOL_FILE):
         try:
-            with open(QUIZ_POOL_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-        except Exception: return {}
+            with open(QUIZ_POOL_FILE, 'r', encoding='utf-8') as f: 
+                return json.load(f)
+        except Exception as e:
+            st.error(f"🚨 【金庫損壞警報】quiz_pool.json 格式有錯！錯誤細節：{e}")
+            return {}
     return {}
 
 def save_quiz_pool(pool_data):
@@ -168,6 +139,7 @@ def load_local_db():
     except Exception as e: return {"讀取錯誤": f"錯誤: {str(e)}"}
 
 SEASON_1_DB = load_local_db()
+
 # ==========================================
 # --- 5. 狀態管理初始化 ---
 # ==========================================
@@ -194,26 +166,25 @@ if st.session_state.user_api_key:
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
     
-    # ✨ CTO 特製：智能集數對照機 (把選單名稱自動對應到金庫名稱)
+    # 智能集數對照機：將「1局下半」對應到 JSON 裡的「第一集」
     episode_map = {
         "1": "第一集", "2": "第二集", "3": "第三集", "4": "第四集", "5": "第五集", 
         "6": "第六集", "7": "第七集", "8": "第八集", "9": "第九集", "10": "第十集"
     }
     
-    # 自動抓取單元名稱裡的數字 (例如 "1局下半" -> "1")
-    ep_num = "".join([c for c in episode_name if c.isdigit()]) 
+    match = re.search(r'\d+', episode_name)
+    ep_num = match.group(0) if match else ""
     
-    if ep_num and ep_num in episode_map:
-        prefix = episode_map[ep_num] # 轉換為 "第一集"
-        # 去金庫裡面尋找對應的考卷
+    if ep_num in episode_map:
+        prefix = episode_map[ep_num]
         for pool_key in pool.keys():
             if pool_key.startswith(prefix) and difficulty_key in pool_key and f"v{attempt_num}" in pool_key:
-                st.toast(f"⚡ 瞬間從金庫抽出考卷！未消耗 API 體力")
+                st.toast("⚡ 瞬間從金庫抽出考卷！未消耗 API 體力")
                 return pool[pool_key]
                 
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
     
-    st.toast(f"🤖 金庫無此考卷，正在呼叫 AI 現場出題 (版本 v{attempt_num})...")
+    st.toast(f"🤖 金庫找不到這份考卷，被迫呼叫 AI 現場出題 (版本 v{attempt_num})...")
     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
@@ -324,7 +295,7 @@ if st.session_state.app_phase == "checkin":
                     student_id = f"{grade}_{cls}_{seat}" 
                     
                     if student_id in cloud_pws:
-                        if cloud_pws[student_id] != student_pw:
+                        if str(cloud_pws[student_id]) != str(student_pw):
                             st.error("🚨 密碼錯誤！有人已經註冊過這個座號囉！（若忘記密碼請找教練協助）")
                         else:
                             st.session_state.user_api_key = clean_key
@@ -377,6 +348,12 @@ elif st.session_state.app_phase == "lobby":
             history_df = get_cloud_history()
             if not history_df.empty:
                 st.dataframe(history_df, use_container_width=True)
+                st.download_button(
+                    label="📥 下載 Excel 紀錄檔",
+                    data=history_df.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name="化學大聯盟_全班戰報.csv",
+                    mime="text/csv"
+                )
             else:
                 st.info("目前尚無任何球員挑戰資料。")
             
@@ -435,6 +412,7 @@ elif st.session_state.app_phase == "lobby":
                         st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
                 else:
                     st.info("雲端目前尚無紀錄！")
+
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
 # ==========================================
