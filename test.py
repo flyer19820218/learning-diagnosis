@@ -8,6 +8,8 @@ import json
 import os 
 import pandas as pd
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
@@ -91,47 +93,58 @@ FALLBACK_QUIZ = [
 ]
 
 # ==========================================
-# --- 4. 動態載入資料庫 & 密碼與存檔機制 ---
+# --- 4. 動態載入資料庫 & 雲端存檔機制 ---
 # ==========================================
 os.makedirs("data", exist_ok=True)
 QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
-HISTORY_FILE = os.path.join("data", "learning_history.csv")
-PASSWORDS_FILE = os.path.join("data", "student_passwords.json") # ✨ 新增密碼資料庫
 
-def load_passwords():
-    """載入全班學生的密碼本"""
-    if os.path.exists(PASSWORDS_FILE):
-        try:
-            with open(PASSWORDS_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-        except Exception: return {}
-    return {}
+# --- Google Sheets 雲端引擎 ---
+@st.cache_resource
+def get_gsheet_client():
+    """建立與 Google Sheets 的安全連線"""
+    try:
+        info = st.secrets["GCP_SERVICE_ACCOUNT"]
+        creds = Credentials.from_service_account_info(
+            info, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        )
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error(f"❌ 雲端連線失敗: {e}")
+        return None
 
-def save_passwords(pw_data):
-    """儲存新註冊的學生密碼"""
-    with open(PASSWORDS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(pw_data, f, ensure_ascii=False, indent=4)
+def sync_cloud_data(worksheet_name, row_data):
+    """將單筆資料寫入雲端試算表"""
+    client = get_gsheet_client()
+    if not client: return
+    try:
+        sh = client.open_by_key(st.secrets["GSHEET_ID"])
+        worksheet = sh.worksheet(worksheet_name)
+        worksheet.append_row(row_data)
+    except Exception as e:
+        st.error(f"❌ 雲端寫入失敗: {e}")
 
-def save_record(profile, episode, score, analysis, guide):
-    """將學生的學習紀錄永久存入 CSV 檔案"""
-    new_data = {
-        "時間": [datetime.now().strftime("%Y-%m-%d %H:%M")],
-        "年級": [profile['grade']],
-        "班級": [profile['class']],
-        "座號": [profile['seat']],
-        "姓名": [profile['name']],
-        "單元": [episode],
-        "分數": [score],
-        "觀念診斷": [analysis],
-        "研讀指南": [guide]
-    }
-    df_new = pd.DataFrame(new_data)
-    if os.path.exists(HISTORY_FILE):
-        df_old = pd.read_csv(HISTORY_FILE)
-        df_combined = pd.concat([df_old, df_new], ignore_index=True)
-        df_combined.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
-    else:
-        df_new.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
+def get_cloud_history():
+    """撈取全班的雲端戰報"""
+    client = get_gsheet_client()
+    if not client: return pd.DataFrame()
+    try:
+        sh = client.open_by_key(st.secrets["GSHEET_ID"])
+        data = sh.worksheet("學習戰報").get_all_records()
+        return pd.DataFrame(data)
+    except: return pd.DataFrame()
 
+def get_cloud_passwords():
+    """從雲端檢查學生密碼"""
+    client = get_gsheet_client()
+    if not client: return {}
+    try:
+        sh = client.open_by_key(st.secrets["GSHEET_ID"])
+        data = sh.worksheet("學生密碼").get_all_records()
+        # 將學號與密碼轉為字串對應字典
+        return {str(row['學號']): str(row['密碼']) for row in data}
+    except: return {}
+
+# --- 本機題庫與講義載入 ---
 def load_quiz_pool():
     if os.path.exists(QUIZ_POOL_FILE):
         try:
@@ -155,7 +168,6 @@ def load_local_db():
     except Exception as e: return {"讀取錯誤": f"錯誤: {str(e)}"}
 
 SEASON_1_DB = load_local_db()
-
 # ==========================================
 # --- 5. 狀態管理初始化 ---
 # ==========================================
@@ -262,7 +274,7 @@ def get_ai_report(player_name, score, mistakes, content):
         return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
 
 # ==========================================
-# --- 7. [介面路由] 球員報到 (新增教練專屬通道) ---
+# --- 7. [介面路由] 球員報到 (雲端密碼校驗) ---
 # ==========================================
 if st.session_state.app_phase == "checkin":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -271,12 +283,8 @@ if st.session_state.app_phase == "checkin":
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
         st.write("---")
         
-        # ✨ 變魔術：新增雙通道分頁設計
         tab1, tab2 = st.tabs(["🧑‍🎓 球員報到", "🛡️ 教練專屬通道"])
         
-        # -------------------------
-        # 通道一：球員報到
-        # -------------------------
         with tab1:
             st.markdown("#### 📝 第一步：填寫報到單")
             c_grade, c_class, c_seat = st.columns(3)
@@ -284,29 +292,26 @@ if st.session_state.app_phase == "checkin":
             with c_class: cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
             with c_seat: seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
             student_name = st.text_input("姓名 (選填)", placeholder="如果不填姓名，戰報將以座號顯示")
-            
             student_pw = st.text_input("個人密碼 🔒", type="password", placeholder="若為首次登入，將自動綁定此密碼")
             
             st.write("<br>", unsafe_allow_html=True)
             st.markdown("#### 🔑 第二步：出示裝備通行證")
             st.markdown("<span style='font-size: 14px; color: #64748b;'>沒有金鑰？👉 <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color: #14b8a6; text-decoration: none; font-weight: bold;'>點此前往 Google AI Studio 免費申請</a></span>", unsafe_allow_html=True)
-            
             api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...", label_visibility="collapsed")
             
             st.write("<br>", unsafe_allow_html=True)
             if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
                 clean_key = api_input.strip().replace("\n", "").replace("\r", "").replace(" ", "")
-                
                 if not student_pw:
                     st.error("🚨 請務必輸入個人密碼！")
                 elif not clean_key: 
                     st.error("🚨 必須輸入 API 金鑰！")
                 else:
-                    pws = load_passwords()
+                    cloud_pws = get_cloud_passwords() # 從雲端讀取密碼
                     student_id = f"{grade}_{cls}_{seat}" 
                     
-                    if student_id in pws:
-                        if pws[student_id] != student_pw:
+                    if student_id in cloud_pws:
+                        if cloud_pws[student_id] != student_pw:
                             st.error("🚨 密碼錯誤！有人已經註冊過這個座號囉！（若忘記密碼請找教練協助）")
                         else:
                             st.session_state.user_api_key = clean_key
@@ -314,18 +319,14 @@ if st.session_state.app_phase == "checkin":
                             st.session_state.app_phase = "lobby" 
                             st.rerun()
                     else:
-                        pws[student_id] = student_pw
-                        save_passwords(pws)
-                        st.toast("✅ 密碼綁定成功！下次請用同一組密碼登入。")
-                        
+                        # 首次登入，同步寫入雲端
+                        sync_cloud_data("學生密碼", [student_id, student_pw])
+                        st.toast("✅ 密碼已安全寫入雲端資料庫！")
                         st.session_state.user_api_key = clean_key
                         st.session_state.student_profile = {"grade": grade, "class": cls, "seat": seat, "name": student_name}
                         st.session_state.app_phase = "lobby" 
                         st.rerun()
 
-        # -------------------------
-        # 通道二：教練專屬 VIP 通道
-        # -------------------------
         with tab2:
             st.markdown("#### 🛡️ 總教練登入")
             coach_pw = st.text_input("輸入教練專屬密碼 🔒", type="password", placeholder="預設密碼...")
@@ -340,17 +341,16 @@ if st.session_state.app_phase == "checkin":
                     st.error("🚨 必須輸入教練的 API 金鑰！")
                 else:
                     st.session_state.user_api_key = clean_coach_key
-                    # ✨ 賦予總教練專屬身分
                     st.session_state.student_profile = {"grade": "🏆", "class": "總教練", "seat": "00", "name": "曉臻老師"}
                     st.session_state.app_phase = "lobby" 
                     st.rerun()
+
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 (完美權限分流版) ---
+# --- 8. [介面路由] 賽季大廳 (雲端權限分流版) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
-    is_coach = (profile.get('class') == "總教練") # ✨ 判斷是否為總教練登入
-    
+    is_coach = (profile.get('class') == "總教練") 
     display_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
     
     col_l, col_m, col_r = st.columns([1, 2, 1])
@@ -359,26 +359,17 @@ elif st.session_state.app_phase == "lobby":
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎{'球員' if not is_coach else ''} {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
-        # ----------------------------------------
-        # 🛡️ 總教練宇宙 (直接看全班資料，免二次密碼)
-        # ----------------------------------------
         if is_coach:
-            st.markdown("### 📈 全球隊學習戰報一覽")
-            if os.path.exists(HISTORY_FILE):
-                history_df = pd.read_csv(HISTORY_FILE)
+            st.markdown("### 📈 全球隊雲端學習戰報")
+            history_df = get_cloud_history()
+            if not history_df.empty:
                 st.dataframe(history_df, use_container_width=True)
-                st.download_button(
-                    label="📥 下載 Excel 紀錄檔",
-                    data=history_df.to_csv(index=False, encoding='utf-8-sig'),
-                    file_name="化學大聯盟_全班戰報.csv",
-                    mime="text/csv"
-                )
             else:
                 st.info("目前尚無任何球員挑戰資料。")
             
             st.write("---")
-            st.markdown("### 🔑 學生密碼清單 (防忘記專用)")
-            pws = load_passwords()
+            st.markdown("### 🔑 學生密碼清單 (雲端同步)")
+            pws = get_cloud_passwords()
             if pws:
                 pw_df = pd.DataFrame(list(pws.items()), columns=["學號 (年級_班級_座號)", "綁定密碼"])
                 st.dataframe(pw_df, use_container_width=True)
@@ -390,12 +381,8 @@ elif st.session_state.app_phase == "lobby":
                 st.session_state.clear()
                 st.rerun()
 
-        # ----------------------------------------
-        # 🧑‍🎓 學生宇宙 (只能挑戰，以及看自己的歷程)
-        # ----------------------------------------
         else:
             with st.expander("⚙️ 報到資料修改 (點此修正姓名)"):
-                st.write("請注意：班級與座號已與您的密碼綁定，若需修改班級座號，請退回報到頁面重新登入。")
                 new_name = st.text_input("修改姓名", value=profile['name'])
                 if st.button("💾 儲存姓名"):
                     st.session_state.student_profile['name'] = new_name
@@ -414,7 +401,6 @@ elif st.session_state.app_phase == "lobby":
                 st.session_state.current_episode = selected_ep
                 st.session_state.current_difficulty = selected_diff
                 st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
-                
                 st.session_state.quiz_data = [] 
                 st.session_state.app_phase = "quiz"
                 st.rerun()
@@ -424,23 +410,18 @@ elif st.session_state.app_phase == "lobby":
                 st.rerun()
             
             st.write("<br><br>", unsafe_allow_html=True)
-            
-            # ✨ 新增：學生個人學習歷程
-            with st.expander("📚 我的學習歷程 (個人戰報)"):
-                if os.path.exists(HISTORY_FILE):
-                    df = pd.read_csv(HISTORY_FILE)
-                    # 嚴格過濾：只抓出年級、班級、座號跟目前登入者一模一樣的資料
+            with st.expander("📚 我的學習歷程 (個人雲端戰報)"):
+                df = get_cloud_history()
+                if not df.empty:
                     my_df = df[(df['年級'].astype(str) == str(profile['grade'])) & 
                                (df['班級'].astype(str) == str(profile['class'])) & 
                                (df['座號'].astype(str) == str(profile['seat']))]
-                    
                     if not my_df.empty:
-                        # 隱藏姓名座號等重複資訊，只顯示時間、單元、分數、觀念診斷給學生複習
                         st.dataframe(my_df[['時間', '單元', '分數', '觀念診斷']], use_container_width=True)
                     else:
                         st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
                 else:
-                    st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
+                    st.info("雲端目前尚無紀錄！")
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
 # ==========================================
@@ -519,7 +500,7 @@ elif st.session_state.app_phase == "dashboard":
         </div>
     """, unsafe_allow_html=True)
     
-    if not st.session_state.ai_analysis:
+   if not st.session_state.ai_analysis:
         if st.button("🚀 開始深度診斷", use_container_width=True, type="primary"):
             with st.spinner("AI 教練正在分析你的戰略失誤..."):
                 profile = st.session_state.student_profile
@@ -529,7 +510,9 @@ elif st.session_state.app_phase == "dashboard":
                 st.session_state.ai_analysis = analysis
                 st.session_state.ai_guide = guide
                 
-                save_record(profile, st.session_state.current_episode, f"{correct_count}/{total_q}", analysis, guide)
+                # ✨ 關鍵：分析完畢後，把成績跟診斷結果存入 Google Sheets 雲端金庫！
+                now_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+                sync_cloud_data("學習戰報", [now_time, profile['grade'], profile['class'], profile['seat'], profile['name'], st.session_state.current_episode, f"{correct_count}/{total_q}", analysis, guide])
                 
                 st.rerun()
 
