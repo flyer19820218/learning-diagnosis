@@ -6,6 +6,8 @@ import google.generativeai as genai
 import plotly.graph_objects as go
 import json
 import os 
+import pandas as pd
+from datetime import datetime
 
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
@@ -63,10 +65,11 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
-# --- 3. 系統提示詞設定 (防幻覺封印版) ---
+# --- 3. 系統提示詞設定 ---
 # ==========================================
 SYSTEM_INSTRUCTION = """
 你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
@@ -83,16 +86,37 @@ DIFFICULTY_LEVELS = {
     "Level 3-素養思考": "生活素養與實驗推論題，需要邏輯推導。"
 }
 
-# 防護用備用題
 FALLBACK_QUIZ = [
     {"topic": "系統防護", "q": "目前 API 額度過載，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
 
 # ==========================================
-# --- 4. 動態載入資料庫 & 自動多版本題庫池 ---
+# --- 4. 動態載入資料庫 & 自動存檔機制 ---
 # ==========================================
 os.makedirs("data", exist_ok=True)
 QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
+HISTORY_FILE = os.path.join("data", "learning_history.csv")
+
+def save_record(profile, episode, score, analysis, guide):
+    """將學生的學習紀錄永久存入 CSV 檔案"""
+    new_data = {
+        "時間": [datetime.now().strftime("%Y-%m-%d %H:%M")],
+        "年級": [profile['grade']],
+        "班級": [profile['class']],
+        "座號": [profile['seat']],
+        "姓名": [profile['name']],
+        "單元": [episode],
+        "分數": [score],
+        "觀念診斷": [analysis],
+        "研讀指南": [guide]
+    }
+    df_new = pd.DataFrame(new_data)
+    if os.path.exists(HISTORY_FILE):
+        df_old = pd.read_csv(HISTORY_FILE)
+        df_combined = pd.concat([df_old, df_new], ignore_index=True)
+        df_combined.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
+    else:
+        df_new.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
 
 def load_quiz_pool():
     if os.path.exists(QUIZ_POOL_FILE):
@@ -145,12 +169,10 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     cache_key = f"{episode_name}_{difficulty_key}_v{attempt_num}"
     pool = load_quiz_pool()
     
-    # 🎯 優先檢查金庫（如果你已經貼好題目，這裡會秒過）
     if cache_key in pool:
         st.toast(f"✅ 載入全班共用考卷 (版本 v{attempt_num})！未消耗 API 體力")
         return pool[cache_key]
     
-    # 金庫找不到才去呼叫 API
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
     
     st.toast(f"🤖 正在呼叫 AI 生成全新考卷 (版本 v{attempt_num})！")
@@ -215,19 +237,18 @@ def get_ai_report(player_name, score, mistakes, content):
         analysis = report_json.get("analysis", "分析生成失敗。")
         guide = report_json.get("guide", "指南生成失敗。")
         
-        # ✨ 新增防呆：如果 AI 假會把字串變成陣列(List)，我們把它合併回字串
         if isinstance(analysis, list):
             analysis = "\n\n".join([str(item) for item in analysis])
         if isinstance(guide, list):
             guide = "\n\n".join([str(item) for item in guide])
             
-        # 強制確保是字串，並拔除 AI 偷塞的標題
         analysis = str(analysis).replace("# 教練熱血分析", "").replace("### 教練熱血分析", "").replace("**教練熱血分析**", "").strip()
         guide = str(guide).replace("# 研讀特訓指南", "").replace("### 研讀特訓指南", "").replace("**研讀特訓指南**", "").strip()
         
         return analysis, guide
     except Exception as e: 
         return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
+
 # ==========================================
 # --- 7. [介面路由] 球員報到 ---
 # ==========================================
@@ -246,23 +267,23 @@ if st.session_state.app_phase == "checkin":
         
         st.write("<br>", unsafe_allow_html=True)
         st.markdown("#### 🔑 第二步：出示裝備通行證")
-        
-        # ✨ 貼心補上新手求救連結
         st.markdown("<span style='font-size: 14px; color: #64748b;'>沒有金鑰？👉 <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color: #14b8a6; text-decoration: none; font-weight: bold;'>點此前往 Google AI Studio 免費申請</a></span>", unsafe_allow_html=True)
         
-        # 隱藏預設標籤，讓畫面更乾淨
         api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...", label_visibility="collapsed")
         
         st.write("<br>", unsafe_allow_html=True)
         if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
-            if api_input.strip():
-                st.session_state.user_api_key = api_input.strip()
+            clean_key = api_input.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+            if clean_key:
+                st.session_state.user_api_key = clean_key
                 st.session_state.student_profile = {"grade": grade, "class": cls, "seat": seat, "name": student_name}
                 st.session_state.app_phase = "lobby" 
                 st.rerun()
-            else: st.error("🚨 必須輸入 API 金鑰！")
+            else: 
+                st.error("🚨 必須輸入 API 金鑰！")
+
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 ---
+# --- 8. [介面路由] 賽季大廳 (加入老師後台) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -274,9 +295,7 @@ elif st.session_state.app_phase == "lobby":
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
-        # 報到資料修改
         with st.expander("⚙️ 報到資料修改 (點此修正班級座號)"):
-            st.write("如果剛才選錯了班級座號，可以在這裡修正：")
             grades = ["國七", "國八", "國九"]
             classes = [f"{i}班" for i in range(1, 21)]
             seats = [str(i).zfill(2) for i in range(1, 51)]
@@ -312,6 +331,24 @@ elif st.session_state.app_phase == "lobby":
         if st.button("🔌 離開球場 (清除資料與金鑰)", use_container_width=True):
             st.session_state.clear()
             st.rerun()
+        
+        st.write("<br><br><br>", unsafe_allow_html=True)
+        # ✨ 新增：總經理室 (老師管理後台)
+        with st.expander("🔐 總經理室 (老師管理後台)"):
+            pw = st.text_input("輸入教練密碼", type="password")
+            if pw == "coach666":
+                if os.path.exists(HISTORY_FILE):
+                    history_df = pd.read_csv(HISTORY_FILE)
+                    st.write("### 📈 學習戰報一覽表")
+                    st.dataframe(history_df, use_container_width=True)
+                    st.download_button(
+                        label="📥 下載 Excel 紀錄檔",
+                        data=history_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="球隊訓練戰報.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.info("目前尚無任何球員挑戰資料。")
 
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
@@ -336,7 +373,6 @@ elif st.session_state.app_phase == "quiz":
         if st.session_state.quiz_data:
             with st.form("quiz_form"):
                 for i, q in enumerate(st.session_state.quiz_data):
-                    # 增強防呆檢查
                     if isinstance(q, dict) and 'q' in q:
                         st.markdown(f"**Q{i+1}: {q['q']}**")
                         opts = q.get('options', ["A", "B", "C", "D"])
@@ -349,7 +385,7 @@ elif st.session_state.app_phase == "quiz":
                     st.rerun()
 
 # ==========================================
-# --- 10. [介面路由] 學習儀表板 ---
+# --- 10. [介面路由] 學習儀表板 (含存檔鉤子) ---
 # ==========================================
 elif st.session_state.app_phase == "dashboard":
     st.markdown(f"<h1 style='text-align: center; color: #1e293b;'>🧪 {st.session_state.current_episode} 診斷報報</h1>", unsafe_allow_html=True)
@@ -395,13 +431,16 @@ elif st.session_state.app_phase == "dashboard":
     if not st.session_state.ai_analysis:
         if st.button("🚀 開始深度診斷", use_container_width=True, type="primary"):
             with st.spinner("AI 教練正在分析你的戰略失誤..."):
-                # ✨ 確保傳遞完整的學生姓名或座號組合給 AI
                 profile = st.session_state.student_profile
                 p_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
                 
                 analysis, guide = get_ai_report(p_name, f"{correct_count}/{total_q}", mistakes_for_ai, SEASON_1_DB.get(st.session_state.current_episode, ""))
                 st.session_state.ai_analysis = analysis
                 st.session_state.ai_guide = guide
+                
+                # ✨ 關鍵：分析完畢後，把成績跟診斷結果存入金庫！
+                save_record(profile, st.session_state.current_episode, f"{correct_count}/{total_q}", analysis, guide)
+                
                 st.rerun()
 
     if st.session_state.ai_analysis:
