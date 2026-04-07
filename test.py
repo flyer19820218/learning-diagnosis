@@ -47,7 +47,7 @@ st.markdown("""
     
     /* ✨ 魔法在這裡：字體自動縮放、行距加大、左右對齊 */
     .learning-card-content { 
-        font-size: clamp(16px, 1.2vw, 20px); /* 最小 16px，最大 20px，隨螢幕寬度變化 */
+        font-size: clamp(17px, 2.2vw, 26px); /* 最小 17px，最大 26px，隨螢幕寬度變化 */
         color: #334155; 
         line-height: 1.8;
         letter-spacing: 0.5px;
