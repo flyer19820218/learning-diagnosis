@@ -27,7 +27,7 @@ st.markdown("""
     .stat-value { font-size: clamp(28px, 3vw, 36px); font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
     .stat-detail { color: #0f172a; margin: 0; font-size: 15px; line-height: 1.8;}
     
-    /* ✨ 統一第三頁：藍色分析大卡片 (與下方卡片字體同步) */
+    /* ✨ 統一第三頁：藍色分析大卡片 */
     .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
     .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
     .analysis-text h4 { margin: 0; color: #1e293b; font-size: clamp(20px, 2.5vw, 28px); font-weight: bold; }
@@ -91,11 +91,25 @@ FALLBACK_QUIZ = [
 ]
 
 # ==========================================
-# --- 4. 動態載入資料庫 & 自動存檔機制 ---
+# --- 4. 動態載入資料庫 & 密碼與存檔機制 ---
 # ==========================================
 os.makedirs("data", exist_ok=True)
 QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
 HISTORY_FILE = os.path.join("data", "learning_history.csv")
+PASSWORDS_FILE = os.path.join("data", "student_passwords.json") # ✨ 新增密碼資料庫
+
+def load_passwords():
+    """載入全班學生的密碼本"""
+    if os.path.exists(PASSWORDS_FILE):
+        try:
+            with open(PASSWORDS_FILE, 'r', encoding='utf-8') as f: return json.load(f)
+        except Exception: return {}
+    return {}
+
+def save_passwords(pw_data):
+    """儲存新註冊的學生密碼"""
+    with open(PASSWORDS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(pw_data, f, ensure_ascii=False, indent=4)
 
 def save_record(profile, episode, score, analysis, guide):
     """將學生的學習紀錄永久存入 CSV 檔案"""
@@ -186,7 +200,7 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     
     🚨【極度重要：嚴格 JSON 格式】🚨
     你輸出的內容必須是純 JSON 陣列，絕對不能包含其他文字或 Markdown 標記。
-    每一題的字典必須完全符合以下 Key 值（嚴禁將 'q' 寫成 'question'）：
+    每一題的字典必須完全符合以下 Key 值：
     [
       {{
         "topic": "知識點名稱",
@@ -237,10 +251,8 @@ def get_ai_report(player_name, score, mistakes, content):
         analysis = report_json.get("analysis", "分析生成失敗。")
         guide = report_json.get("guide", "指南生成失敗。")
         
-        if isinstance(analysis, list):
-            analysis = "\n\n".join([str(item) for item in analysis])
-        if isinstance(guide, list):
-            guide = "\n\n".join([str(item) for item in guide])
+        if isinstance(analysis, list): analysis = "\n\n".join([str(item) for item in analysis])
+        if isinstance(guide, list): guide = "\n\n".join([str(item) for item in guide])
             
         analysis = str(analysis).replace("# 教練熱血分析", "").replace("### 教練熱血分析", "").replace("**教練熱血分析**", "").strip()
         guide = str(guide).replace("# 研讀特訓指南", "").replace("### 研讀特訓指南", "").replace("**研讀特訓指南**", "").strip()
@@ -250,7 +262,7 @@ def get_ai_report(player_name, score, mistakes, content):
         return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
 
 # ==========================================
-# --- 7. [介面路由] 球員報到 ---
+# --- 7. [介面路由] 球員報到 (新增教練專屬通道) ---
 # ==========================================
 if st.session_state.app_phase == "checkin":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -258,32 +270,82 @@ if st.session_state.app_phase == "checkin":
     with col2:
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
         st.write("---")
-        st.markdown("#### 📝 第一步：填寫報到單")
-        c_grade, c_class, c_seat = st.columns(3)
-        with c_grade: grade = st.selectbox("年級", ["國七", "國八", "國九"])
-        with c_class: cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
-        with c_seat: seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
-        student_name = st.text_input("姓名 (選填)", placeholder="如果不填姓名，戰報將以座號顯示")
         
-        st.write("<br>", unsafe_allow_html=True)
-        st.markdown("#### 🔑 第二步：出示裝備通行證")
-        st.markdown("<span style='font-size: 14px; color: #64748b;'>沒有金鑰？👉 <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color: #14b8a6; text-decoration: none; font-weight: bold;'>點此前往 Google AI Studio 免費申請</a></span>", unsafe_allow_html=True)
+        # ✨ 變魔術：新增雙通道分頁設計
+        tab1, tab2 = st.tabs(["🧑‍🎓 球員報到", "🛡️ 教練專屬通道"])
         
-        api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...", label_visibility="collapsed")
-        
-        st.write("<br>", unsafe_allow_html=True)
-        if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
-            clean_key = api_input.strip().replace("\n", "").replace("\r", "").replace(" ", "")
-            if clean_key:
-                st.session_state.user_api_key = clean_key
-                st.session_state.student_profile = {"grade": grade, "class": cls, "seat": seat, "name": student_name}
-                st.session_state.app_phase = "lobby" 
-                st.rerun()
-            else: 
-                st.error("🚨 必須輸入 API 金鑰！")
+        # -------------------------
+        # 通道一：球員報到
+        # -------------------------
+        with tab1:
+            st.markdown("#### 📝 第一步：填寫報到單")
+            c_grade, c_class, c_seat = st.columns(3)
+            with c_grade: grade = st.selectbox("年級", ["國七", "國八", "國九"])
+            with c_class: cls = st.selectbox("班級", [f"{i}班" for i in range(1, 21)])
+            with c_seat: seat = st.selectbox("座號", [str(i).zfill(2) for i in range(1, 51)])
+            student_name = st.text_input("姓名 (選填)", placeholder="如果不填姓名，戰報將以座號顯示")
+            
+            student_pw = st.text_input("個人密碼 🔒", type="password", placeholder="若為首次登入，將自動綁定此密碼")
+            
+            st.write("<br>", unsafe_allow_html=True)
+            st.markdown("#### 🔑 第二步：出示裝備通行證")
+            st.markdown("<span style='font-size: 14px; color: #64748b;'>沒有金鑰？👉 <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color: #14b8a6; text-decoration: none; font-weight: bold;'>點此前往 Google AI Studio 免費申請</a></span>", unsafe_allow_html=True)
+            
+            api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...", label_visibility="collapsed")
+            
+            st.write("<br>", unsafe_allow_html=True)
+            if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
+                clean_key = api_input.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                
+                if not student_pw:
+                    st.error("🚨 請務必輸入個人密碼！")
+                elif not clean_key: 
+                    st.error("🚨 必須輸入 API 金鑰！")
+                else:
+                    pws = load_passwords()
+                    student_id = f"{grade}_{cls}_{seat}" 
+                    
+                    if student_id in pws:
+                        if pws[student_id] != student_pw:
+                            st.error("🚨 密碼錯誤！有人已經註冊過這個座號囉！（若忘記密碼請找教練協助）")
+                        else:
+                            st.session_state.user_api_key = clean_key
+                            st.session_state.student_profile = {"grade": grade, "class": cls, "seat": seat, "name": student_name}
+                            st.session_state.app_phase = "lobby" 
+                            st.rerun()
+                    else:
+                        pws[student_id] = student_pw
+                        save_passwords(pws)
+                        st.toast("✅ 密碼綁定成功！下次請用同一組密碼登入。")
+                        
+                        st.session_state.user_api_key = clean_key
+                        st.session_state.student_profile = {"grade": grade, "class": cls, "seat": seat, "name": student_name}
+                        st.session_state.app_phase = "lobby" 
+                        st.rerun()
 
+        # -------------------------
+        # 通道二：教練專屬 VIP 通道
+        # -------------------------
+        with tab2:
+            st.markdown("#### 🛡️ 總教練登入")
+            coach_pw = st.text_input("輸入教練專屬密碼 🔒", type="password", placeholder="預設密碼...")
+            coach_api = st.text_input("輸入教練的 API 金鑰", type="password", placeholder="AIzaSy...")
+            
+            st.write("<br>", unsafe_allow_html=True)
+            if st.button("💼 進入總經理室", use_container_width=True, type="primary"):
+                clean_coach_key = coach_api.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                if coach_pw != "coach666":
+                    st.error("🚨 教練密碼錯誤，拒絕存取！")
+                elif not clean_coach_key:
+                    st.error("🚨 必須輸入教練的 API 金鑰！")
+                else:
+                    st.session_state.user_api_key = clean_coach_key
+                    # ✨ 賦予總教練專屬身分
+                    st.session_state.student_profile = {"grade": "🏆", "class": "總教練", "seat": "00", "name": "曉臻老師"}
+                    st.session_state.app_phase = "lobby" 
+                    st.rerun()
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 (加入老師後台) ---
+# --- 8. [介面路由] 賽季大廳 (老師後台升級密碼管理) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -295,20 +357,12 @@ elif st.session_state.app_phase == "lobby":
         st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
-        with st.expander("⚙️ 報到資料修改 (點此修正班級座號)"):
-            grades = ["國七", "國八", "國九"]
-            classes = [f"{i}班" for i in range(1, 21)]
-            seats = [str(i).zfill(2) for i in range(1, 51)]
-            
-            c_g, c_c, c_s = st.columns(3)
-            with c_g: new_grade = st.selectbox("修改年級", grades, index=grades.index(profile['grade']))
-            with c_c: new_cls = st.selectbox("修改班級", classes, index=classes.index(profile['class']))
-            with c_s: new_seat = st.selectbox("修改座號", seats, index=seats.index(profile['seat']))
+        with st.expander("⚙️ 報到資料修改 (點此修正姓名)"):
+            st.write("請注意：班級與座號已與您的密碼綁定，若需修改班級座號，請退回報到頁面重新登入。")
             new_name = st.text_input("修改姓名", value=profile['name'])
-            
-            if st.button("💾 儲存修改資料"):
-                st.session_state.student_profile = {"grade": new_grade, "class": new_cls, "seat": new_seat, "name": new_name}
-                st.success("✅ 報到資料已更新！")
+            if st.button("💾 儲存姓名"):
+                st.session_state.student_profile['name'] = new_name
+                st.success("✅ 姓名已更新！")
                 st.rerun()
         
         st.write("<br>", unsafe_allow_html=True)
@@ -316,7 +370,7 @@ elif st.session_state.app_phase == "lobby":
         selected_diff = st.radio("🔥 選擇挑戰難度", list(DIFFICULTY_LEVELS.keys()))
         
         st.write("<br>", unsafe_allow_html=True)
-        if st.button("⚾ Play Ball! (全自動智慧出題)", use_container_width=True, type="primary"):
+        if st.button("⚾ Play Ball! (開始挑戰)", use_container_width=True, type="primary"):
             track_key = f"{selected_ep}_{selected_diff}"
             st.session_state.attempt_tracker[track_key] = st.session_state.attempt_tracker.get(track_key, 0) + 1
             
@@ -328,18 +382,20 @@ elif st.session_state.app_phase == "lobby":
             st.session_state.app_phase = "quiz"
             st.rerun()
             
-        if st.button("🔌 離開球場 (清除資料與金鑰)", use_container_width=True):
+        if st.button("🔌 離開球場 (登出)", use_container_width=True):
             st.session_state.clear()
             st.rerun()
         
         st.write("<br><br><br>", unsafe_allow_html=True)
-        # ✨ 新增：總經理室 (老師管理後台)
+        
+        # ✨ 總經理室：老師管理後台 (加入密碼管理功能)
         with st.expander("🔐 總經理室 (老師管理後台)"):
             pw = st.text_input("輸入教練密碼", type="password")
             if pw == "coach666":
+                # 區塊 1：成績戰報
+                st.write("### 📈 學習戰報一覽表")
                 if os.path.exists(HISTORY_FILE):
                     history_df = pd.read_csv(HISTORY_FILE)
-                    st.write("### 📈 學習戰報一覽表")
                     st.dataframe(history_df, use_container_width=True)
                     st.download_button(
                         label="📥 下載 Excel 紀錄檔",
@@ -349,6 +405,16 @@ elif st.session_state.app_phase == "lobby":
                     )
                 else:
                     st.info("目前尚無任何球員挑戰資料。")
+                
+                st.write("---")
+                # 區塊 2：學生密碼管理
+                st.write("### 🔑 學生密碼清單 (防忘記專用)")
+                pws = load_passwords()
+                if pws:
+                    pw_df = pd.DataFrame(list(pws.items()), columns=["學號 (年級_班級_座號)", "綁定密碼"])
+                    st.dataframe(pw_df, use_container_width=True)
+                else:
+                    st.info("目前尚無學生註冊密碼。")
 
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
@@ -385,7 +451,7 @@ elif st.session_state.app_phase == "quiz":
                     st.rerun()
 
 # ==========================================
-# --- 10. [介面路由] 學習儀表板 (含存檔鉤子) ---
+# --- 10. [介面路由] 學習儀表板 ---
 # ==========================================
 elif st.session_state.app_phase == "dashboard":
     st.markdown(f"<h1 style='text-align: center; color: #1e293b;'>🧪 {st.session_state.current_episode} 診斷報報</h1>", unsafe_allow_html=True)
@@ -438,7 +504,6 @@ elif st.session_state.app_phase == "dashboard":
                 st.session_state.ai_analysis = analysis
                 st.session_state.ai_guide = guide
                 
-                # ✨ 關鍵：分析完畢後，把成績跟診斷結果存入金庫！
                 save_record(profile, st.session_state.current_episode, f"{correct_count}/{total_q}", analysis, guide)
                 
                 st.rerun()
