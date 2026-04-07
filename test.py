@@ -192,16 +192,28 @@ if st.session_state.user_api_key:
 # --- 6. AI 雙核心引擎 (出題 & 診斷) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
-    cache_key = f"{episode_name}_{difficulty_key}_v{attempt_num}"
     pool = load_quiz_pool()
     
-    if cache_key in pool:
-        st.toast(f"✅ 載入全班共用考卷 (版本 v{attempt_num})！未消耗 API 體力")
-        return pool[cache_key]
+    # ✨ CTO 特製：智能集數對照機 (把選單名稱自動對應到金庫名稱)
+    episode_map = {
+        "1": "第一集", "2": "第二集", "3": "第三集", "4": "第四集", "5": "第五集", 
+        "6": "第六集", "7": "第七集", "8": "第八集", "9": "第九集", "10": "第十集"
+    }
     
+    # 自動抓取單元名稱裡的數字 (例如 "1局下半" -> "1")
+    ep_num = "".join([c for c in episode_name if c.isdigit()]) 
+    
+    if ep_num and ep_num in episode_map:
+        prefix = episode_map[ep_num] # 轉換為 "第一集"
+        # 去金庫裡面尋找對應的考卷
+        for pool_key in pool.keys():
+            if pool_key.startswith(prefix) and difficulty_key in pool_key and f"v{attempt_num}" in pool_key:
+                st.toast(f"⚡ 瞬間從金庫抽出考卷！未消耗 API 體力")
+                return pool[pool_key]
+                
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
     
-    st.toast(f"🤖 正在呼叫 AI 生成全新考卷 (版本 v{attempt_num})！")
+    st.toast(f"🤖 金庫無此考卷，正在呼叫 AI 現場出題 (版本 v{attempt_num})...")
     model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
     course_content = SEASON_1_DB.get(episode_name, "")
     diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
@@ -229,6 +241,7 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
         quiz_json = json.loads(clean_text)
         
         if isinstance(quiz_json, list) and len(quiz_json) > 0 and 'q' in quiz_json[0]:
+            cache_key = f"{episode_name}_{difficulty_key}_v{attempt_num}"
             pool[cache_key] = quiz_json
             save_quiz_pool(pool)
             return quiz_json
