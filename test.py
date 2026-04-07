@@ -10,7 +10,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 防爆框) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 護眼大字體) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -21,29 +21,38 @@ st.markdown("""
     
     /* 復刻數據大卡片樣式 */
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
-    .stat-label { color: #64748b; font-size: 14px; margin-bottom: 5px; text-align: center;}
-    .stat-value { font-size: 32px; font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
-    .stat-detail { color: #0f172a; margin: 0; font-size: 14px; line-height: 1.8;}
+    .stat-label { color: #64748b; font-size: 16px; margin-bottom: 5px; text-align: center;}
+    .stat-value { font-size: 36px; font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
+    .stat-detail { color: #0f172a; margin: 0; font-size: 15px; line-height: 1.8;}
     
     /* 復刻藍色分析大卡片 */
     .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
     .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
-    .analysis-text h4 { margin: 0; color: #1e293b; }
-    .analysis-text p { margin: 0; color: #64748b; font-size: 14px; }
+    .analysis-text h4 { margin: 0; color: #1e293b; font-size: 20px; }
+    .analysis-text p { margin: 0; color: #64748b; font-size: 16px; }
     
     /* 復刻下方學習卡片 (加入彈性高度防爆框) */
     .learning-card { 
-        background-color: #f8fafc; 
-        padding: 20px; 
+        background-color: #fdfcf9; /* 稍微帶點暖色，護眼 */
+        padding: 24px; 
         border-radius: 12px; 
         min-height: 180px; 
         height: auto;      
         margin-bottom: 20px; 
+        border: 1px solid #e5e7eb;
     }
-    .learning-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .learning-card-icon { background-color: #1e293b; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;}
-    .learning-card-header b { font-size: 16px; color: #1e293b;}
-    .learning-card-content { font-size: 13px; color: #475569; line-height: 1.6;}
+    .learning-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .learning-card-icon { background-color: #1e293b; width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px;}
+    .learning-card-header b { font-size: 18px; color: #1e293b;}
+    
+    /* ✨ 魔法在這裡：字體自動縮放、行距加大、左右對齊 */
+    .learning-card-content { 
+        font-size: clamp(16px, 1.2vw, 20px); /* 最小 16px，最大 20px，隨螢幕寬度變化 */
+        color: #334155; 
+        line-height: 1.8;
+        letter-spacing: 0.5px;
+        text-align: justify; 
+    }
     
     /* 視覺基礎 */
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
