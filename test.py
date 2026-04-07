@@ -10,7 +10,7 @@ import os
 st.set_page_config(page_title="化學大聯盟：學習診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 護眼大字體) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 標題與內文同步放大) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -31,9 +31,9 @@ st.markdown("""
     .analysis-text h4 { margin: 0; color: #1e293b; font-size: 20px; }
     .analysis-text p { margin: 0; color: #64748b; font-size: 16px; }
     
-    /* 復刻下方學習卡片 (加入彈性高度防爆框) */
+    /* 復刻下方學習卡片 */
     .learning-card { 
-        background-color: #fdfcf9; /* 稍微帶點暖色，護眼 */
+        background-color: #fdfcf9; 
         padding: 24px; 
         border-radius: 12px; 
         min-height: 180px; 
@@ -41,13 +41,19 @@ st.markdown("""
         margin-bottom: 20px; 
         border: 1px solid #e5e7eb;
     }
-    .learning-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .learning-card-icon { background-color: #1e293b; width: 45px; height: 45px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px;}
-    .learning-card-header b { font-size: 18px; color: #1e293b;}
     
-    /* ✨ 魔法在這裡：字體自動縮放、行距加大、左右對齊 */
+    /* ✨ 標題區塊升級：圖示與文字間距拉開 */
+    .learning-card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+    
+    /* ✨ 圖示稍微放大，配合大標題 */
+    .learning-card-icon { background-color: #1e293b; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px;}
+    
+    /* ✨ 標題魔法：手機20px，平板/電腦最高放大到30px！ */
+    .learning-card-header b { font-size: clamp(20px, 2.5vw, 30px); color: #1e293b; } 
+    
+    /* 內文魔法：手機維持17px，平板與電腦最高可放大到26px！ */
     .learning-card-content { 
-        font-size: clamp(17px, 2.2vw, 26px); /* 最小 17px，最大 26px，隨螢幕寬度變化 */
+        font-size: clamp(17px, 2.0vw, 26px); 
         color: #334155; 
         line-height: 1.8;
         letter-spacing: 0.5px;
@@ -58,7 +64,6 @@ st.markdown("""
     .stMarkdown p { line-height: 1.8; font-size: 16px; }
     </style>
 """, unsafe_allow_html=True)
-
 MODEL_ID = "gemini-2.5-flash"
 
 # ==========================================
