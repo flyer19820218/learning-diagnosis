@@ -233,8 +233,14 @@ if st.session_state.app_phase == "checkin":
         
         st.write("<br>", unsafe_allow_html=True)
         st.markdown("#### 🔑 第二步：出示裝備通行證")
-        api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...")
         
+        # ✨ 貼心補上新手求救連結
+        st.markdown("<span style='font-size: 14px; color: #64748b;'>沒有金鑰？👉 <a href='https://aistudio.google.com/app/apikey' target='_blank' style='color: #14b8a6; text-decoration: none; font-weight: bold;'>點此前往 Google AI Studio 免費申請</a></span>", unsafe_allow_html=True)
+        
+        # 隱藏預設標籤，讓畫面更乾淨
+        api_input = st.text_input("輸入 Gemini API 金鑰", type="password", placeholder="AIzaSy...", label_visibility="collapsed")
+        
+        st.write("<br>", unsafe_allow_html=True)
         if st.button("🚀 報到完成，進入大廳！", use_container_width=True):
             if api_input.strip():
                 st.session_state.user_api_key = api_input.strip()
@@ -242,7 +248,6 @@ if st.session_state.app_phase == "checkin":
                 st.session_state.app_phase = "lobby" 
                 st.rerun()
             else: st.error("🚨 必須輸入 API 金鑰！")
-
 # ==========================================
 # --- 8. [介面路由] 賽季大廳 ---
 # ==========================================
