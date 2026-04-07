@@ -189,7 +189,7 @@ def get_ai_report(player_name, score, mistakes, content):
         1. analysis (學習成效分析)：嚴格診斷學生「哪個觀念不對」或「哪裡需要加強」。語氣要像資深教練，指出他答錯的共同邏輯錯誤。絕對不要列出逐題解析。
         2. guide (研讀指南)：提供 3 點具體的「特訓建議」。指導他應該回去看講義的哪個部分，或如何練習。
         
-        輸出格式：
+        🚨 輸出格式 (確保 analysis 與 guide 的值都是「單一字串 Text」，絕對不要使用陣列 List)：
         {{
           "analysis": "觀念診斷內容...",
           "guide": "具體建議內容..."
@@ -202,14 +202,19 @@ def get_ai_report(player_name, score, mistakes, content):
         analysis = report_json.get("analysis", "分析生成失敗。")
         guide = report_json.get("guide", "指南生成失敗。")
         
-        # 強制拔除 AI 偷塞的標題
-        analysis = analysis.replace("# 教練熱血分析", "").replace("### 教練熱血分析", "").replace("**教練熱血分析**", "").strip()
-        guide = guide.replace("# 研讀特訓指南", "").replace("### 研讀特訓指南", "").replace("**研讀特訓指南**", "").strip()
+        # ✨ 新增防呆：如果 AI 假會把字串變成陣列(List)，我們把它合併回字串
+        if isinstance(analysis, list):
+            analysis = "\n\n".join([str(item) for item in analysis])
+        if isinstance(guide, list):
+            guide = "\n\n".join([str(item) for item in guide])
+            
+        # 強制確保是字串，並拔除 AI 偷塞的標題
+        analysis = str(analysis).replace("# 教練熱血分析", "").replace("### 教練熱血分析", "").replace("**教練熱血分析**", "").strip()
+        guide = str(guide).replace("# 研讀特訓指南", "").replace("### 研讀特訓指南", "").replace("**研讀特訓指南**", "").strip()
         
         return analysis, guide
     except Exception as e: 
-        return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試。"
-
+        return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
 # ==========================================
 # --- 7. [介面路由] 球員報到 ---
 # ==========================================
