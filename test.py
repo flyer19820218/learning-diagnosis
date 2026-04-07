@@ -500,7 +500,7 @@ elif st.session_state.app_phase == "dashboard":
         </div>
     """, unsafe_allow_html=True)
     
-   if not st.session_state.ai_analysis:
+    if not st.session_state.ai_analysis:
         if st.button("🚀 開始深度診斷", use_container_width=True, type="primary"):
             with st.spinner("AI 教練正在分析你的戰略失誤..."):
                 profile = st.session_state.student_profile
