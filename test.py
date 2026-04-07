@@ -345,77 +345,102 @@ if st.session_state.app_phase == "checkin":
                     st.session_state.app_phase = "lobby" 
                     st.rerun()
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 (老師後台升級密碼管理) ---
+# --- 8. [介面路由] 賽季大廳 (完美權限分流版) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
+    is_coach = (profile.get('class') == "總教練") # ✨ 判斷是否為總教練登入
+    
     display_name = profile['name'] if profile['name'] else f"{profile['grade']}{profile['class']} {profile['seat']}號"
     
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         st.write("<br>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎球員 {display_name}</h2>", unsafe_allow_html=True)
+        st.markdown(f"<h2 style='text-align: center;'>🏟️ 歡迎{'球員' if not is_coach else ''} {display_name}</h2>", unsafe_allow_html=True)
         st.write("---")
         
-        with st.expander("⚙️ 報到資料修改 (點此修正姓名)"):
-            st.write("請注意：班級與座號已與您的密碼綁定，若需修改班級座號，請退回報到頁面重新登入。")
-            new_name = st.text_input("修改姓名", value=profile['name'])
-            if st.button("💾 儲存姓名"):
-                st.session_state.student_profile['name'] = new_name
-                st.success("✅ 姓名已更新！")
-                st.rerun()
-        
-        st.write("<br>", unsafe_allow_html=True)
-        selected_ep = st.selectbox("📌 選擇賽事單元", list(SEASON_1_DB.keys()))
-        selected_diff = st.radio("🔥 選擇挑戰難度", list(DIFFICULTY_LEVELS.keys()))
-        
-        st.write("<br>", unsafe_allow_html=True)
-        if st.button("⚾ Play Ball! (開始挑戰)", use_container_width=True, type="primary"):
-            track_key = f"{selected_ep}_{selected_diff}"
-            st.session_state.attempt_tracker[track_key] = st.session_state.attempt_tracker.get(track_key, 0) + 1
+        # ----------------------------------------
+        # 🛡️ 總教練宇宙 (直接看全班資料，免二次密碼)
+        # ----------------------------------------
+        if is_coach:
+            st.markdown("### 📈 全球隊學習戰報一覽")
+            if os.path.exists(HISTORY_FILE):
+                history_df = pd.read_csv(HISTORY_FILE)
+                st.dataframe(history_df, use_container_width=True)
+                st.download_button(
+                    label="📥 下載 Excel 紀錄檔",
+                    data=history_df.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name="化學大聯盟_全班戰報.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("目前尚無任何球員挑戰資料。")
             
-            st.session_state.current_episode = selected_ep
-            st.session_state.current_difficulty = selected_diff
-            st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
-            
-            st.session_state.quiz_data = [] 
-            st.session_state.app_phase = "quiz"
-            st.rerun()
-            
-        if st.button("🔌 離開球場 (登出)", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
-        
-        st.write("<br><br><br>", unsafe_allow_html=True)
-        
-        # ✨ 總經理室：老師管理後台 (加入密碼管理功能)
-        with st.expander("🔐 總經理室 (老師管理後台)"):
-            pw = st.text_input("輸入教練密碼", type="password")
-            if pw == "coach666":
-                # 區塊 1：成績戰報
-                st.write("### 📈 學習戰報一覽表")
-                if os.path.exists(HISTORY_FILE):
-                    history_df = pd.read_csv(HISTORY_FILE)
-                    st.dataframe(history_df, use_container_width=True)
-                    st.download_button(
-                        label="📥 下載 Excel 紀錄檔",
-                        data=history_df.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="球隊訓練戰報.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.info("目前尚無任何球員挑戰資料。")
+            st.write("---")
+            st.markdown("### 🔑 學生密碼清單 (防忘記專用)")
+            pws = load_passwords()
+            if pws:
+                pw_df = pd.DataFrame(list(pws.items()), columns=["學號 (年級_班級_座號)", "綁定密碼"])
+                st.dataframe(pw_df, use_container_width=True)
+            else:
+                st.info("目前尚無學生註冊密碼。")
                 
-                st.write("---")
-                # 區塊 2：學生密碼管理
-                st.write("### 🔑 學生密碼清單 (防忘記專用)")
-                pws = load_passwords()
-                if pws:
-                    pw_df = pd.DataFrame(list(pws.items()), columns=["學號 (年級_班級_座號)", "綁定密碼"])
-                    st.dataframe(pw_df, use_container_width=True)
-                else:
-                    st.info("目前尚無學生註冊密碼。")
+            st.write("<br><br>", unsafe_allow_html=True)
+            if st.button("🔌 離開總經理室 (登出)", use_container_width=True):
+                st.session_state.clear()
+                st.rerun()
 
+        # ----------------------------------------
+        # 🧑‍🎓 學生宇宙 (只能挑戰，以及看自己的歷程)
+        # ----------------------------------------
+        else:
+            with st.expander("⚙️ 報到資料修改 (點此修正姓名)"):
+                st.write("請注意：班級與座號已與您的密碼綁定，若需修改班級座號，請退回報到頁面重新登入。")
+                new_name = st.text_input("修改姓名", value=profile['name'])
+                if st.button("💾 儲存姓名"):
+                    st.session_state.student_profile['name'] = new_name
+                    st.success("✅ 姓名已更新！")
+                    st.rerun()
+            
+            st.write("<br>", unsafe_allow_html=True)
+            selected_ep = st.selectbox("📌 選擇賽事單元", list(SEASON_1_DB.keys()))
+            selected_diff = st.radio("🔥 選擇挑戰難度", list(DIFFICULTY_LEVELS.keys()))
+            
+            st.write("<br>", unsafe_allow_html=True)
+            if st.button("⚾ Play Ball! (開始挑戰)", use_container_width=True, type="primary"):
+                track_key = f"{selected_ep}_{selected_diff}"
+                st.session_state.attempt_tracker[track_key] = st.session_state.attempt_tracker.get(track_key, 0) + 1
+                
+                st.session_state.current_episode = selected_ep
+                st.session_state.current_difficulty = selected_diff
+                st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
+                
+                st.session_state.quiz_data = [] 
+                st.session_state.app_phase = "quiz"
+                st.rerun()
+                
+            if st.button("🔌 離開球場 (登出)", use_container_width=True):
+                st.session_state.clear()
+                st.rerun()
+            
+            st.write("<br><br>", unsafe_allow_html=True)
+            
+            # ✨ 新增：學生個人學習歷程
+            with st.expander("📚 我的學習歷程 (個人戰報)"):
+                if os.path.exists(HISTORY_FILE):
+                    df = pd.read_csv(HISTORY_FILE)
+                    # 嚴格過濾：只抓出年級、班級、座號跟目前登入者一模一樣的資料
+                    my_df = df[(df['年級'].astype(str) == str(profile['grade'])) & 
+                               (df['班級'].astype(str) == str(profile['class'])) & 
+                               (df['座號'].astype(str) == str(profile['seat']))]
+                    
+                    if not my_df.empty:
+                        # 隱藏姓名座號等重複資訊，只顯示時間、單元、分數、觀念診斷給學生複習
+                        st.dataframe(my_df[['時間', '單元', '分數', '觀念診斷']], use_container_width=True)
+                    else:
+                        st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
+                else:
+                    st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
 # ==========================================
 # --- 9. [介面路由] 測驗系統 ---
 # ==========================================
