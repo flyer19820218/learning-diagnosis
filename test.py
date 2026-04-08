@@ -6,6 +6,7 @@ import google.generativeai as genai
 import json
 import os 
 import re
+import random
 import pandas as pd
 from datetime import datetime
 import gspread
@@ -14,7 +15,7 @@ from google.oauth2.service_account import Credentials
 st.set_page_config(page_title="化學大聯盟：雲端診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大 + 學習卡特效) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -37,6 +38,16 @@ st.markdown("""
     .learning-card-content { font-size: clamp(17px, 1.8vw, 24px); color: #334155; line-height: 1.8; letter-spacing: 0.5px; text-align: justify; }
     .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
     div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
+    
+    /* ✨ 3D 翻轉學習卡特效 (解決了背面字體反轉問題) */
+    .flip-card { background-color: transparent; width: 100%; height: 260px; perspective: 1000px; margin-bottom: 20px; }
+    .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
+    .flip-card:active .flip-card-inner, .flip-card:focus .flip-card-inner, .flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
+    .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 20px; padding: 25px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
+    .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
+    .flip-card-back { background-color: #1e293b; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
+    .fc-title { font-size: clamp(22px, 2.5vw, 28px); font-weight: bold; line-height: 1.4; }
+    .fc-content { font-size: clamp(18px, 1.8vw, 24px); line-height: 1.6; text-align: left; width: 100%; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -138,7 +149,19 @@ def load_local_db():
         else: return {"尚未載入賽程": "請確定資料庫檔案存在。"}
     except Exception as e: return {"讀取錯誤": f"錯誤: {str(e)}"}
 
+# ✨ 新增：載入學習卡資料庫
+@st.cache_data
+def load_flashcards_db():
+    json_path = os.path.join("data", "flashcards_db.json")
+    try:
+        if os.path.exists(json_path):
+            with open(json_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except: pass
+    return {}
+
 SEASON_1_DB = load_local_db()
+FLASH_DB = load_flashcards_db()
 
 # ==========================================
 # --- 5. 狀態管理初始化 ---
@@ -157,9 +180,12 @@ if "current_episode" not in st.session_state: st.session_state.current_episode =
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
 if "current_attempt_num" not in st.session_state: st.session_state.current_attempt_num = 1
 
-# ✨ 新增：單題挑戰模式的專屬記憶體
+# 單題挑戰模式的專屬記憶體
 if "current_q_index" not in st.session_state: st.session_state.current_q_index = 0
 if "q_answered" not in st.session_state: st.session_state.q_answered = False
+
+# ✨ 新增：記錄目前看到第幾張學習卡
+if "card_index" not in st.session_state: st.session_state.card_index = 0
 
 if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
@@ -169,6 +195,12 @@ if st.session_state.user_api_key:
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
+    
+    # ✨ 題庫隨機抽籤：如果題庫裡有 _pool 結尾的大題庫，直接抽 10 題
+    pool_key = f"{episode_name}_{difficulty_key}_pool"
+    if pool_key in pool and len(pool[pool_key]) >= 10:
+        st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬 10 題！(免耗體力)")
+        return random.sample(pool[pool_key], 10)
     
     # 智能集數對照機：將「1局下半」對應到 JSON 裡的「第一集」
     episode_map = {
@@ -181,10 +213,10 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
     
     if ep_num in episode_map:
         prefix = episode_map[ep_num]
-        for pool_key in pool.keys():
-            if pool_key.startswith(prefix) and difficulty_key in pool_key and f"v{attempt_num}" in pool_key:
+        for p_key in pool.keys():
+            if p_key.startswith(prefix) and difficulty_key in p_key and f"v{attempt_num}" in p_key:
                 st.toast("⚡ 瞬間從金庫抽出考卷！未消耗 API 體力")
-                return pool[pool_key]
+                return pool[p_key]
                 
     if not st.session_state.user_api_key: return FALLBACK_QUIZ
     
@@ -397,16 +429,17 @@ elif st.session_state.app_phase == "lobby":
                 st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
                 st.session_state.quiz_data = [] 
                 
-                # ✨ 新增：上場前要把題號歸零，並清除之前的作答紀錄
+                # 記憶體重置
                 st.session_state.current_q_index = 0
                 st.session_state.q_answered = False
                 st.session_state.user_ans = {}
+                st.session_state.card_index = 0 # 學習卡回歸第一張
                 
                 st.session_state.app_phase = "quiz"
                 st.rerun()
 
 # ==========================================
-# --- 9. [介面路由] 測驗系統 (單題沉浸模式) ---
+# --- 9. [介面路由] 測驗系統 (單題沉浸模式 + 黃金切版) ---
 # ==========================================
 elif st.session_state.app_phase == "quiz":
     ep_name = st.session_state.current_episode
@@ -416,12 +449,50 @@ elif st.session_state.app_phase == "quiz":
     st.markdown(f"## ✍️ {ep_name} [{diff_name}] - 第 {attempt_num} 次挑戰")
     st.write("---")
     
-    col_l, col_r = st.columns([1, 1.5], gap="large")
-    with col_l:
+    # ✨ 黃金切版：左邊比例 1 (講義)，右邊比例 2.2 (卡片+單題測驗)
+    col_lecture, col_main = st.columns([1, 2.2], gap="large")
+    
+    with col_lecture:
         st.info("📖 戰術板 (講義複習)") 
         st.markdown(SEASON_1_DB.get(ep_name, "讀取失敗"))
         
-    with col_r:
+    with col_main:
+        # --- 區塊 A：學習卡 ---
+        cards = FLASH_DB.get(ep_name, [])
+        if cards:
+            st.markdown("### 🃏 賽前快速記憶")
+            idx = st.session_state.card_index
+            current_card = cards[idx]
+            
+            st.markdown(f"""
+                <div class="flip-card">
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front">
+                            <div class="fc-title">{current_card['front']}</div>
+                            <p style='color: #94a3b8; font-size: clamp(14px, 1.5vw, 18px); margin-top: 15px;'>Hover to flip / 滑鼠移入看答案</p>
+                        </div>
+                        <div class="flip-card-back">
+                            <div class="fc-content">{current_card['back']}</div>
+                        </div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2, c3 = st.columns([1, 2, 1])
+            with c1:
+                if st.button("⬅️ 上一張", use_container_width=True) and idx > 0:
+                    st.session_state.card_index -= 1
+                    st.rerun()
+            with c2:
+                st.write(f"<p style='text-align:center; color:#64748b; font-size:16px; padding-top:8px;'>學習卡進度 {idx+1} / {len(cards)}</p>", unsafe_allow_html=True)
+            with c3:
+                if st.button("下一張 ➡️", use_container_width=True) and idx < len(cards) - 1:
+                    st.session_state.card_index += 1
+                    st.rerun()
+            st.write("<br>", unsafe_allow_html=True)
+
+        # --- 區塊 B：實戰測驗 (保留你的單題沉浸模式) ---
+        st.markdown("### ✍️ 實戰測試")
         if not st.session_state.quiz_data:
             with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
                 st.session_state.quiz_data = get_quiz_data(ep_name, diff_name, attempt_num)
@@ -432,13 +503,10 @@ elif st.session_state.app_phase == "quiz":
             curr_idx = st.session_state.current_q_index
             q = st.session_state.quiz_data[curr_idx]
             
-            # 顯示進度條
             st.progress((curr_idx) / total_q, text=f"進度：第 {curr_idx + 1} 題 / 共 {total_q} 題")
-            
             st.markdown(f"**Q{curr_idx + 1}: {q.get('q', '題目遺失')}**")
             opts = q.get('options', ["A", "B", "C", "D"])
             
-            # 如果還沒作答 -> 顯示表單讓學生選
             if not st.session_state.q_answered:
                 with st.form(f"q_form_{curr_idx}"):
                     choice = st.radio("請選擇答案：", opts, label_visibility="collapsed")
@@ -446,8 +514,6 @@ elif st.session_state.app_phase == "quiz":
                         st.session_state.user_ans[curr_idx] = choice
                         st.session_state.q_answered = True
                         st.rerun()
-            
-            # 如果已經作答 -> 鎖定答案，給出即時回饋與下一題按鈕
             else:
                 st.radio("你的選擇：", opts, index=opts.index(st.session_state.user_ans[curr_idx]), disabled=True, label_visibility="collapsed")
                 
@@ -461,10 +527,8 @@ elif st.session_state.app_phase == "quiz":
                     st.error(f"💥 揮棒落空！正確答案是 {ans_letter}。")
                 
                 st.info(f"💡 教練即時解析：\n\n{q.get('diag', '無')}")
-                
                 st.write("<br>", unsafe_allow_html=True)
                 
-                # 判斷要顯示「下一題」還是「看結算戰報」
                 if curr_idx < total_q - 1:
                     if st.button("👉 下一題", type="primary", use_container_width=True):
                         st.session_state.current_q_index += 1
