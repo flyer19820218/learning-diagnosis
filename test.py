@@ -39,16 +39,19 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
     div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
     
-    /* ✨ 3D 翻轉學習卡特效 (解決了背面字體反轉問題) */
-    .flip-card { background-color: transparent; width: 100%; height: 260px; perspective: 1000px; margin-bottom: 20px; }
-    .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; cursor: pointer; }
-    .flip-card:active .flip-card-inner, .flip-card:focus .flip-card-inner, .flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
+    /* 🃏 3D 翻轉卡片 CSS (統一改為「點擊翻面」) */
+    .flip-card { background-color: transparent; width: 100%; height: 300px; perspective: 1000px; margin-bottom: 20px; display: block; cursor: pointer; }
+    .flip-card-checkbox { display: none; } /* 隱藏用來記錄點擊狀態的開關 */
+    .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+    
+    /* ✨ 關鍵魔法：當隱藏的 checkbox 被點擊勾選時，裡面的卡片就翻轉 180 度 */
+    .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
+    
     .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 20px; padding: 25px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
     .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
     .flip-card-back { background-color: #1e293b; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
-    .fc-title { font-size: clamp(22px, 2.5vw, 28px); font-weight: bold; line-height: 1.4; }
+    .fc-title { font-size: clamp(22px, 2.5vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
     .fc-content { font-size: clamp(18px, 1.8vw, 24px); line-height: 1.6; text-align: left; width: 100%; }
-    </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
@@ -465,17 +468,18 @@ elif st.session_state.app_phase == "quiz":
             current_card = cards[idx]
             
             st.markdown(f"""
-                <div class="flip-card">
+                <label class="flip-card">
+                    <input type="checkbox" class="flip-card-checkbox">
                     <div class="flip-card-inner">
                         <div class="flip-card-front">
                             <div class="fc-title">{current_card['front']}</div>
-                            <p style='color: #94a3b8; font-size: clamp(14px, 1.5vw, 18px); margin-top: 15px;'>Hover to flip / 滑鼠移入看答案</p>
+                            <p style='color: #94a3b8; font-size: clamp(14px, 1.5vw, 18px); margin-top: 15px;'>👆 點擊卡片看答案</p>
                         </div>
                         <div class="flip-card-back">
                             <div class="fc-content">{current_card['back']}</div>
                         </div>
                     </div>
-                </div>
+                </label>
             """, unsafe_allow_html=True)
             
             c1, c2, c3 = st.columns([1, 2, 1])
