@@ -17,8 +17,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="化學大聯盟：雲端診斷系統", page_icon="🎓", layout="wide", initial_sidebar_state="collapsed")
 
 # 🚨 總教練專屬金鑰設定區 🚨
-# 供 801 專屬通道免填金鑰自動扣款使用。請將 API Key 填入雙引號中。
-# (也可直接從 Streamlit 金庫讀取，雙重保險)
+# 系統會自動從 Streamlit 後台的 Secrets 金庫讀取金鑰，不怕外洩！
 TEACHER_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 # ✨ 注入全螢幕懸浮按鈕黑魔法
@@ -150,7 +149,6 @@ def get_gsheet_client():
     except Exception as e:
         return None
 
-# ✨ SaaS 升級：自動建表防呆機制的雲端同步函數
 def sync_cloud_data(worksheet_name, row_data, headers=None):
     client = get_gsheet_client()
     if not client: return
@@ -160,7 +158,6 @@ def sync_cloud_data(worksheet_name, row_data, headers=None):
             worksheet = sh.worksheet(worksheet_name)
         except Exception as e:
             if "WorksheetNotFound" in str(type(e)):
-                # 如果找不到表，系統自動當你建好！
                 worksheet = sh.add_worksheet(title=worksheet_name, rows="1000", cols="20")
                 if headers: worksheet.append_row(headers)
             else:
@@ -200,7 +197,6 @@ def get_cloud_passwords():
         return {str(row.get('學號','')): str(row.get('密碼','')) for row in data}
     except: return {}
 
-# ✨ SaaS 升級：讀取「教練名冊」
 def get_coach_accounts():
     client = get_gsheet_client()
     if not client: return {}
@@ -283,7 +279,7 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. 核心引擎 (AI 出題與診斷) ---
+# --- 6. 核心引擎 ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
@@ -381,7 +377,7 @@ def get_class_analysis(episode, target_class, history_df):
         return f"⚠️ 綜合戰情分析生成失敗: {e}"
 
 # ==========================================
-# --- 7. [介面路由] 球員報到 (SaaS 多租戶升級版) ---
+# --- 7. [介面路由] 球員報到 (雙重保險滿級版) ---
 # ==========================================
 if st.session_state.app_phase == "checkin":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -397,21 +393,48 @@ if st.session_state.app_phase == "checkin":
             c_seat, c_name = st.columns(2)
             with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 32)], key="seat_801")
             with c_name: name_801 = st.text_input("姓名 (選填)", key="name_801")
-            pw_801 = st.text_input("通關密碼 🔒", type="password", placeholder="輸入專屬密碼...", key="pw_801")
             
-            st.info("💡 提示：本通道由教練贊助 AI 費用，無需自行輸入金鑰即可開始挑戰！")
+            st.write("<br>", unsafe_allow_html=True)
+            st.markdown("#### 🔐 雙重安全認證")
+            
+            # ✨ 第一道鎖：防外人的班級通關密碼
+            vip_code = st.text_input("① 班級通關密碼 🔑", type="password", placeholder="請輸入教練發布的班級密碼", key="vip_code")
+            # ✨ 第二道鎖：防內鬼的個人專屬密碼
+            pw_801 = st.text_input("② 個人專屬密碼 🔒", type="password", placeholder="首次登入將自動綁定，防止同學亂登入", key="pw_801")
+            
+            st.info("💡 提示：本通道由教練贊助 AI 費用，無需自行輸入金鑰！")
             
             if st.button("🚀 801 專屬登入", use_container_width=True, type="primary"):
-                if pw_801 == "20251112":
-                    if TEACHER_API_KEY.strip():
+                # 第一道防線：驗證班級密碼
+                if vip_code != st.secrets.get("VIP_PASSWORD", "20251112"):
+                    st.error("🚨 班級通關密碼錯誤！這不是 801 班的密碼喔！")
+                # 第二道防線：確認有輸入個人密碼
+                elif not pw_801:
+                    st.error("🚨 請務必輸入個人專屬密碼！")
+                # 第三道防線：確認教練金鑰有設定
+                elif not TEACHER_API_KEY.strip():
+                    st.error("🚨 教練尚未在系統設定 TEACHER_API_KEY，無法使用專屬通道！")
+                else:
+                    cloud_pws = get_cloud_passwords()
+                    student_id = f"國八_1班_{seat_801}"  # 801專屬學號格式
+                    
+                    if student_id in cloud_pws:
+                        # 核對雲端紀錄的個人密碼
+                        if str(cloud_pws[student_id]) != str(pw_801):
+                            st.error("🚨 個人密碼錯誤！這個座號已經綁定了其他的密碼囉！")
+                        else:
+                            st.session_state.user_api_key = TEACHER_API_KEY.strip()
+                            st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
+                            st.session_state.app_phase = "lobby" 
+                            st.rerun()
+                    else:
+                        # 首次登入自動綁定密碼
+                        sync_cloud_data("學生密碼", [student_id, pw_801], ["學號", "密碼"])
+                        st.toast("✅ 專屬密碼已安全綁定至雲端資料庫！")
                         st.session_state.user_api_key = TEACHER_API_KEY.strip()
                         st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
                         st.session_state.app_phase = "lobby" 
                         st.rerun()
-                    else:
-                        st.error("🚨 教練尚未在系統設定 TEACHER_API_KEY，無法使用專屬通道！")
-                else:
-                    st.error("🚨 密碼錯誤！這不是 801 班的密碼喔！")
 
         with tab2:
             st.markdown("#### 📝 一般通道：填寫報到單")
@@ -456,23 +479,24 @@ if st.session_state.app_phase == "checkin":
             if coach_action == "🔑 教練登入":
                 coach_id = st.text_input("教練帳號", placeholder="輸入您註冊的帳號")
                 coach_pw = st.text_input("教練密碼 🔒", type="password")
-                coach_api = st.text_input("您的 API 金鑰", type="password", placeholder="AIzaSy...", key="coach_api")
+                coach_api = st.text_input("您的 API 金鑰 (選填)", type="password", placeholder="AIzaSy...", key="coach_api")
                 
                 if st.button("💼 進入專屬總經理室", use_container_width=True, type="primary"):
                     clean_coach_key = coach_api.strip() or TEACHER_API_KEY
                     if not clean_coach_key:
-                        st.error("🚨 必須輸入 API 金鑰！")
+                        st.error("🚨 系統找不到 API 金鑰，請輸入！")
                     else:
                         accounts = get_coach_accounts()
-                        if coach_id == "admin" and coach_pw == "coach666":
-                            # 隱藏的超級創辦人，看得到全校
+                        # ✨ 總教練的密碼也是從金庫來！
+                        master_coach_pw = st.secrets.get("COACH_PASSWORD", "coach666")
+                        
+                        if coach_id == "admin" and coach_pw == master_coach_pw:
                             st.session_state.managed_classes = "ALL"
                             st.session_state.user_api_key = clean_coach_key
                             st.session_state.student_profile = {"grade": "🏆", "class": "總教練", "seat": "00", "name": "創辦人"}
                             st.session_state.app_phase = "lobby" 
                             st.rerun()
                         elif coach_id in accounts and str(accounts[coach_id]['pw']) == str(coach_pw):
-                            # 一般教練，只能看自己選的班級
                             st.session_state.managed_classes = accounts[coach_id]['classes']
                             st.session_state.user_api_key = clean_coach_key
                             st.session_state.student_profile = {"grade": "🏆", "class": "總教練", "seat": "00", "name": f"{coach_id} 教練"}
@@ -522,7 +546,6 @@ elif st.session_state.app_phase == "lobby":
             history_df = get_cloud_history()
             
             if not history_df.empty:
-                # ✨ SaaS 核心：過濾資料，只讓老師看到自己的班級！
                 if managed_classes != "ALL":
                     history_df['grade_class'] = history_df['年級'].astype(str) + "_" + history_df['班級'].astype(str)
                     history_df = history_df[history_df['grade_class'].isin(managed_classes)]
@@ -575,7 +598,6 @@ elif st.session_state.app_phase == "lobby":
             st.markdown("### 🔑 專屬班級密碼管理")
             pws = get_cloud_passwords()
             if pws:
-                # ✨ SaaS 核心：過濾密碼清單，只能看到自己學生的密碼！
                 if managed_classes != "ALL":
                     pws = {k: v for k, v in pws.items() if "_".join(k.split("_")[:2]) in managed_classes}
                 
