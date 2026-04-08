@@ -11,8 +11,46 @@ import pandas as pd
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="化學大聯盟：雲端診斷系統", page_icon="⚾", layout="wide", initial_sidebar_state="collapsed")
+
+# ✨ 注入全螢幕懸浮按鈕黑魔法 (專治 iPad 沉浸感不足)
+components.html(
+    """
+    <script>
+    if (!window.parent.document.getElementById('fullscreen-btn')) {
+        const btnHtml = '<div id="fullscreen-btn" style="position:fixed; bottom:30px; right:30px; background-color:#3b82f6; color:white; padding:15px 25px; border-radius:50px; cursor:pointer; z-index:999999; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); font-family:sans-serif; font-size:18px; font-weight:bold; transition:all 0.3s; display:flex; align-items:center; gap:8px;">🔲 進入全螢幕</div>';
+        window.parent.document.body.insertAdjacentHTML('beforeend', btnHtml);
+        
+        window.parent.document.getElementById('fullscreen-btn').addEventListener('click', function() {
+            var doc = window.parent.document;
+            var docEl = doc.documentElement;
+            var requestFullScreen = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            var cancelFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+
+            if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement) {
+                if (requestFullScreen) {
+                    requestFullScreen.call(docEl);
+                    this.innerHTML = '🔳 退出全螢幕';
+                    this.style.backgroundColor = '#0f172a';
+                } else {
+                    alert("您的裝置不支援全螢幕喔！(iPhone Safari 預設不支援，請使用 iPad)");
+                }
+            } else {
+                if (cancelFullScreen) {
+                    cancelFullScreen.call(doc);
+                    this.innerHTML = '🔲 進入全螢幕';
+                    this.style.backgroundColor = '#3b82f6';
+                }
+            }
+        });
+    }
+    </script>
+    """,
+    height=0,
+    width=0
+)
 
 # ==========================================
 # --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大 + 學習卡特效) ---
@@ -23,19 +61,26 @@ st.markdown("""
     html, body, .stApp, p, h1, h2, h3, h4, h5, h6, li {
         font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
+    
+    /* ✨ 讓 Streamlit 突破預設寬度，98% 吃滿整個螢幕 */
+    .block-container { max-width: 98% !important; padding-top: 2rem !important; padding-bottom: 2rem !important; }
+
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
     .stat-label { color: #64748b; font-size: 16px; margin-bottom: 5px; text-align: center;}
     .stat-value { font-size: clamp(28px, 3vw, 36px); font-weight: bold; color: #0f172a; text-align: center; margin: 0;}
     .stat-detail { color: #0f172a; margin: 0; font-size: 15px; line-height: 1.8;}
+    
     .analysis-container { background-color: #f0f7ff; padding: 20px; border-radius: 16px; border: 1px solid #d0e7ff; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;}
     .analysis-icon { background-color: #0f172a; width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
     .analysis-text h4 { margin: 0; color: #1e293b; font-size: clamp(20px, 2.5vw, 28px); font-weight: bold; }
     .analysis-text p { margin: 0; color: #64748b; font-size: clamp(17px, 1.8vw, 24px); margin-top: 5px; }
+    
     .learning-card { background-color: #fdfcf9; padding: 24px; border-radius: 12px; min-height: 180px; height: auto; margin-bottom: 20px; border: 1px solid #e5e7eb; }
     .learning-card-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .learning-card-icon { background-color: #1e293b; width: 50px; height: 50px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px;}
     .learning-card-header b { font-size: clamp(20px, 2.5vw, 28px); color: #1e293b; } 
     .learning-card-content { font-size: clamp(17px, 1.8vw, 24px); color: #334155; line-height: 1.8; letter-spacing: 0.5px; text-align: justify; }
+    
     .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
     div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
     
@@ -43,14 +88,16 @@ st.markdown("""
     .flip-card { 
         background-color: transparent; 
         width: 100%; 
-        max-width: 400px; /* ✨ 防禦機制：在電腦大螢幕上最多長到 400px，不會變成巨無霸 */
+        max-width: 550px; /* ✨ 防禦機制：在電腦大螢幕上最多長到 550px，不會變成巨無霸 */
         aspect-ratio: 1 / 1; /* ✨ 核心魔法：捨棄固定的 height，強制長寬比永遠 1:1！ */
-        margin: 0 auto 20px auto; /* ✨ 讓正方形卡片在欄位中永遠「置中對齊」 */
+        margin: 0 auto 30px auto; /* ✨ 讓正方形卡片在欄位中永遠「置中對齊」 */
         display: block; 
         cursor: pointer; 
     }
     .flip-card-checkbox { display: none; }
     .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+    
+    /* ✨ 關鍵魔法：當隱藏的 checkbox 被點擊勾選時，裡面的卡片就翻轉 180 度 */
     .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
     
     .flip-card-front, .flip-card-back { 
@@ -66,15 +113,7 @@ st.markdown("""
     /* ✨ 字體也升級成「動態縮放 (clamp)」，完美適應 iPad 螢幕 */
     .fc-title { font-size: clamp(20px, 4vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
     .fc-content { font-size: clamp(16px, 3.5vw, 22px); line-height: 1.6; text-align: left; width: 100%; }
-    
-    /* ✨ 關鍵魔法：當隱藏的 checkbox 被點擊勾選時，裡面的卡片就翻轉 180 度 */
-    .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
-    
-    .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 20px; padding: 25px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
-    .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
-    .flip-card-back { background-color: #1e293b; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
-    .fc-title { font-size: clamp(22px, 2.5vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
-    .fc-content { font-size: clamp(18px, 1.8vw, 24px); line-height: 1.6; text-align: left; width: 100%; }
+    </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
@@ -475,8 +514,8 @@ elif st.session_state.app_phase == "quiz":
     st.markdown(f"## ✍️ {ep_name} [{diff_name}] - 第 {attempt_num} 次挑戰")
     st.write("---")
     
-    # ✨ 黃金切版：左邊比例 1 (講義)，右邊比例 2.2 (卡片+單題測驗)
-    col_lecture, col_main = st.columns([1, 2.2], gap="large")
+    # ✨ 黃金切版：左邊比例 1 (講義)，右邊比例 1 (卡片+單題測驗) - 完美吃滿版面
+    col_lecture, col_main = st.columns([1, 1], gap="large")
     
     with col_lecture:
         st.info("📖 戰術板 (講義複習)") 
@@ -663,7 +702,7 @@ elif st.session_state.app_phase == "dashboard":
                 st.info(f"💡 診斷：{q.get('diag','無')}")
                 st.write("---")
 
-    if st.button("🔄 回到大廳 (挑戰新局)"):
+    if st.button("🔄 回到大廳 (挑戰新局)", use_container_width=True):
         st.session_state.ai_analysis = None
         st.session_state.ai_guide = None
         st.session_state.app_phase = "lobby"
