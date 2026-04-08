@@ -220,6 +220,35 @@ def get_coach_accounts():
         return result
     except: return {}
 
+def delete_student_password(student_id):
+    client = get_gsheet_client()
+    if not client: return False
+    try:
+        sh = client.open_by_key(st.secrets["GSHEET_ID"])
+        ws = sh.worksheet("學生密碼")
+        cell = ws.find(student_id)
+        if cell:
+            try:
+                ws.delete_rows(cell.row)
+            except AttributeError:
+                ws.delete_row(cell.row)
+        return True
+    except Exception as e:
+        return False
+
+def update_student_password(student_id, new_pw):
+    client = get_gsheet_client()
+    if not client: return False
+    try:
+        sh = client.open_by_key(st.secrets["GSHEET_ID"])
+        ws = sh.worksheet("學生密碼")
+        cell = ws.find(student_id)
+        if cell:
+            ws.update_cell(cell.row, cell.col + 1, new_pw)
+        return True
+    except:
+        return False
+
 def load_quiz_pool():
     if os.path.exists(QUIZ_POOL_FILE):
         try:
@@ -279,13 +308,13 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. 核心引擎 ---
+# --- 6. 核心引擎 (AI 出題與診斷) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
     pool_key = f"{episode_name}_{difficulty_key}_pool"
     if pool_key in pool and len(pool[pool_key]) >= 10:
-        st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬考卷！")
+        st.toast(f"🎲 啟隨機題庫：從大題庫為你抽出專屬考卷！")
         return random.sample(pool[pool_key], 10)
     
     episode_map = {
@@ -377,7 +406,7 @@ def get_class_analysis(episode, target_class, history_df):
         return f"⚠️ 綜合戰情分析生成失敗: {e}"
 
 # ==========================================
-# --- 7. [介面路由] 球員報到 (雙重保險滿級版) ---
+# --- 7. [介面路由] 球員報到 (重新排版隱藏 VIP) ---
 # ==========================================
 if st.session_state.app_phase == "checkin":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -386,57 +415,11 @@ if st.session_state.app_phase == "checkin":
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
         st.write("---")
         
-        tab1, tab2, tab3 = st.tabs(["🌟 801 專屬通道", "🧑‍🎓 一般球員報到", "🛡️ 教練專屬通道"])
+        # ✨ 更新分頁順序：一般報到 -> 教練後台 -> 801隱藏通道
+        tab1, tab2, tab3 = st.tabs(["🧑‍🎓 一般球員報到", "🛡️ 教練專屬通道", "🌟 801 專屬通道"])
         
+        # --- TAB 1: 一般球員報到 ---
         with tab1:
-            st.markdown("#### 🚀 801 班專屬快速通關")
-            c_seat, c_name = st.columns(2)
-            with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 32)], key="seat_801")
-            with c_name: name_801 = st.text_input("姓名 (選填)", key="name_801")
-            
-            st.write("<br>", unsafe_allow_html=True)
-            st.markdown("#### 🔐 雙重安全認證")
-            
-            # ✨ 第一道鎖：防外人的班級通關密碼
-            vip_code = st.text_input("① 班級通關密碼 🔑", type="password", placeholder="請輸入教練發布的班級密碼", key="vip_code")
-            # ✨ 第二道鎖：防內鬼的個人專屬密碼
-            pw_801 = st.text_input("② 個人專屬密碼 🔒", type="password", placeholder="首次登入將自動綁定，防止同學亂登入", key="pw_801")
-            
-            st.info("💡 提示：本通道由教練贊助 AI 費用，無需自行輸入金鑰！")
-            
-            if st.button("🚀 801 專屬登入", use_container_width=True, type="primary"):
-                # 第一道防線：驗證班級密碼
-                if vip_code != st.secrets.get("VIP_PASSWORD", "20251112"):
-                    st.error("🚨 班級通關密碼錯誤！這不是 801 班的密碼喔！")
-                # 第二道防線：確認有輸入個人密碼
-                elif not pw_801:
-                    st.error("🚨 請務必輸入個人專屬密碼！")
-                # 第三道防線：確認教練金鑰有設定
-                elif not TEACHER_API_KEY.strip():
-                    st.error("🚨 教練尚未在系統設定 TEACHER_API_KEY，無法使用專屬通道！")
-                else:
-                    cloud_pws = get_cloud_passwords()
-                    student_id = f"國八_1班_{seat_801}"  # 801專屬學號格式
-                    
-                    if student_id in cloud_pws:
-                        # 核對雲端紀錄的個人密碼
-                        if str(cloud_pws[student_id]) != str(pw_801):
-                            st.error("🚨 個人密碼錯誤！這個座號已經綁定了其他的密碼囉！")
-                        else:
-                            st.session_state.user_api_key = TEACHER_API_KEY.strip()
-                            st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
-                            st.session_state.app_phase = "lobby" 
-                            st.rerun()
-                    else:
-                        # 首次登入自動綁定密碼
-                        sync_cloud_data("學生密碼", [student_id, pw_801], ["學號", "密碼"])
-                        st.toast("✅ 專屬密碼已安全綁定至雲端資料庫！")
-                        st.session_state.user_api_key = TEACHER_API_KEY.strip()
-                        st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
-                        st.session_state.app_phase = "lobby" 
-                        st.rerun()
-
-        with tab2:
             st.markdown("#### 📝 一般通道：填寫報到單")
             c_grade, c_class, c_seat = st.columns(3)
             with c_grade: grade = st.selectbox("年級", ["國七", "國八", "國九"])
@@ -472,7 +455,8 @@ if st.session_state.app_phase == "checkin":
                         st.session_state.app_phase = "lobby" 
                         st.rerun()
 
-        with tab3:
+        # --- TAB 2: 教練專屬通道 ---
+        with tab2:
             st.markdown("#### 🛡️ 教練專屬後台")
             coach_action = st.radio("請選擇操作", ["🔑 教練登入", "📝 註冊新教練 (自動開通專屬後台)"], horizontal=True)
             
@@ -487,7 +471,6 @@ if st.session_state.app_phase == "checkin":
                         st.error("🚨 系統找不到 API 金鑰，請輸入！")
                     else:
                         accounts = get_coach_accounts()
-                        # ✨ 總教練的密碼也是從金庫來！
                         master_coach_pw = st.secrets.get("COACH_PASSWORD", "coach666")
                         
                         if coach_id == "admin" and coach_pw == master_coach_pw:
@@ -523,7 +506,50 @@ if st.session_state.app_phase == "checkin":
                             st.error("🚨 此帳號已被註冊，請換一個名稱。")
                         else:
                             sync_cloud_data("教練名冊", [new_coach_id, new_coach_pw, ",".join(managed)], ["教練帳號", "密碼", "管理班級"])
-                            st.success("✅ 註冊成功！請切換至左側「教練登入」進入您的專屬後台。")
+                            st.success("✅ 註冊成功！請切換至上方「教練登入」進入您的專屬後台。")
+
+        # --- TAB 3: 801 專屬隱藏通道 ---
+        with tab3:
+            # ✨ 加上煙霧彈標題
+            st.markdown("#### 🚀 801 班專屬快速通關 (尚未開通)")
+            c_seat, c_name = st.columns(2)
+            with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 32)], key="seat_801")
+            with c_name: name_801 = st.text_input("姓名 (選填)", key="name_801")
+            
+            st.write("<br>", unsafe_allow_html=True)
+            st.markdown("#### 🔐 雙重安全認證")
+            
+            vip_code = st.text_input("① 班級通關密碼 🔑", type="password", placeholder="請輸入教練發布的班級密碼", key="vip_code")
+            pw_801 = st.text_input("② 個人專屬密碼 🔒", type="password", placeholder="首次登入將自動綁定，防止同學亂登入", key="pw_801")
+            
+            st.info("💡 提示：本通道由教練贊助 AI 費用，無需自行輸入金鑰！")
+            
+            if st.button("🚀 801 專屬登入", use_container_width=True, type="primary"):
+                if vip_code != st.secrets.get("VIP_PASSWORD", "20251112"):
+                    st.error("🚨 班級通關密碼錯誤！這不是 801 班的密碼喔！")
+                elif not pw_801:
+                    st.error("🚨 請務必輸入個人專屬密碼！")
+                elif not TEACHER_API_KEY.strip():
+                    st.error("🚨 教練尚未在系統設定 TEACHER_API_KEY，無法使用專屬通道！")
+                else:
+                    cloud_pws = get_cloud_passwords()
+                    student_id = f"國八_1班_{seat_801}" 
+                    
+                    if student_id in cloud_pws:
+                        if str(cloud_pws[student_id]) != str(pw_801):
+                            st.error("🚨 個人密碼錯誤！這個座號已經綁定了其他的密碼囉！")
+                        else:
+                            st.session_state.user_api_key = TEACHER_API_KEY.strip()
+                            st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
+                            st.session_state.app_phase = "lobby" 
+                            st.rerun()
+                    else:
+                        sync_cloud_data("學生密碼", [student_id, pw_801], ["學號", "密碼"])
+                        st.toast("✅ 專屬密碼已安全綁定至雲端資料庫！")
+                        st.session_state.user_api_key = TEACHER_API_KEY.strip()
+                        st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": seat_801, "name": name_801}
+                        st.session_state.app_phase = "lobby" 
+                        st.rerun()
 
 # ==========================================
 # --- 8. [介面路由] 賽季大廳 (SaaS 資料隔離版) ---
@@ -604,6 +630,18 @@ elif st.session_state.app_phase == "lobby":
                 if pws:
                     pw_df = pd.DataFrame(list(pws.items()), columns=["學號 (年級_班級_座號)", "綁定密碼"])
                     st.dataframe(pw_df, use_container_width=True)
+                    
+                    st.write("<br>", unsafe_allow_html=True)
+                    st.markdown("#### 🔧 座號防盜與重置")
+                    st.write("若有白目學生亂註冊別人的座號，您可以直接在這裡將其重置，真正的學生就能重新註冊。")
+                    reset_id = st.selectbox("選擇要重置密碼的學號", list(pws.keys()))
+                    if st.button("🗑️ 踢除內鬼 (重置該學號)", type="primary"):
+                        with st.spinner("正在呼叫金庫刪除紀錄..."):
+                            if delete_student_password(reset_id):
+                                st.success(f"✅ {reset_id} 的密碼已重置！真正的學生現在可以去重新註冊了。")
+                                st.rerun()
+                            else:
+                                st.error("❌ 重置失敗，請確認雲端連線。")
                 else:
                     st.info("您的班級目前尚未有學生註冊。")
             else:
@@ -615,11 +653,22 @@ elif st.session_state.app_phase == "lobby":
                 st.rerun()
 
         else:
-            with st.expander("⚙️ 報到資料修改 (點此修正姓名)"):
+            with st.expander("⚙️ 帳號資料修改 (姓名與密碼)"):
                 new_name = st.text_input("修改姓名", value=profile['name'])
-                if st.button("💾 儲存姓名"):
+                new_pw = st.text_input("修改個人密碼 🔒", type="password", placeholder="若不修改請留空")
+                
+                if st.button("💾 儲存修改"):
+                    current_student_id = f"{profile['grade']}_{profile['class']}_{profile['seat']}"
                     st.session_state.student_profile['name'] = new_name
-                    st.success("✅ 姓名已更新！")
+                    
+                    if new_pw:
+                        with st.spinner("正在更新金庫密碼..."):
+                            if update_student_password(current_student_id, new_pw):
+                                st.success("✅ 姓名與密碼皆已更新！下次請使用新密碼登入。")
+                            else:
+                                st.error("❌ 密碼更新失敗，請稍後再試。")
+                    else:
+                        st.success("✅ 姓名已更新！")
                     st.rerun()
             
             st.write("<br>", unsafe_allow_html=True)
