@@ -717,9 +717,10 @@ elif st.session_state.app_phase == "quiz":
             idx = st.session_state.card_index
             current_card = cards[idx]
             
-            st.markdown(f"""
+            # ✨ 神級修復：給 input 加上獨一無二的 id (包含單元名與進度)，強迫瀏覽器重置翻面狀態！
+         st.markdown(f"""
                 <label class="flip-card">
-                    <input type="checkbox" class="flip-card-checkbox">
+                    <input type="checkbox" class="flip-card-checkbox" id="card_toggle_{ep_name}_{idx}">
                     <div class="flip-card-inner">
                         <div class="flip-card-front">
                             <div class="fc-title">{current_card['front']}</div>
