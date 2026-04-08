@@ -715,20 +715,24 @@ elif st.session_state.app_phase == "quiz":
             idx = st.session_state.card_index
             current_card = cards[idx]
             
-            # ✨ 神級修復：給 input 加上獨一無二的 id，強迫瀏覽器重置翻面狀態！
+            # ✨ 終極黑魔法：利用單雙數改變外層標籤 (div vs section)，強迫系統徹底銷毀舊卡片狀態，保證絕對翻回正面！
+            wrapper_tag = "div" if idx % 2 == 0 else "section"
+            
             st.markdown(f"""
-                <label class="flip-card">
-                    <input type="checkbox" class="flip-card-checkbox" id="card_toggle_{ep_name}_{idx}">
-                    <div class="flip-card-inner">
-                        <div class="flip-card-front">
-                            <div class="fc-title">{current_card['front']}</div>
-                            <p style='color: #94a3b8; font-size: clamp(14px, 1.5vw, 18px); margin-top: 15px;'>👆 點擊卡片看答案</p>
+                <{wrapper_tag}>
+                    <label class="flip-card">
+                        <input type="checkbox" class="flip-card-checkbox" autocomplete="off">
+                        <div class="flip-card-inner">
+                            <div class="flip-card-front">
+                                <div class="fc-title">{current_card['front']}</div>
+                                <p style='color: #94a3b8; font-size: clamp(14px, 1.5vw, 18px); margin-top: 15px;'>👆 點擊卡片看答案</p>
+                            </div>
+                            <div class="flip-card-back">
+                                <div class="fc-content">{current_card['back']}</div>
+                            </div>
                         </div>
-                        <div class="flip-card-back">
-                            <div class="fc-content">{current_card['back']}</div>
-                        </div>
-                    </div>
-                </label>
+                    </label>
+                </{wrapper_tag}>
             """, unsafe_allow_html=True)
             
             c1, c2, c3 = st.columns([1, 2, 1])
