@@ -53,7 +53,7 @@ components.html(
 )
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大 + 學習卡特效) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版 + 學習卡特效 + 咖啡紅背面) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -62,7 +62,7 @@ st.markdown("""
         font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
     
-    /* ✨ 讓 Streamlit 突破預設寬度，98% 吃滿整個螢幕 */
+    /* 讓 Streamlit 突破預設寬度，98% 吃滿整個螢幕 */
     .block-container { max-width: 98% !important; padding-top: 2rem !important; padding-bottom: 2rem !important; }
 
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
@@ -84,33 +84,25 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
     div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
     
-    /* 🃏 3D 翻轉卡片 CSS (專為 iPad/手機 打造的 1:1 完美正方形) */
+    /* 🃏 3D 翻轉卡片 CSS */
     .flip-card { 
-        background-color: transparent; 
-        width: 100%; 
-        max-width: 550px; /* ✨ 防禦機制：在電腦大螢幕上最多長到 550px，不會變成巨無霸 */
-        aspect-ratio: 1 / 1; /* ✨ 核心魔法：捨棄固定的 height，強制長寬比永遠 1:1！ */
-        margin: 0 auto 30px auto; /* ✨ 讓正方形卡片在欄位中永遠「置中對齊」 */
-        display: block; 
-        cursor: pointer; 
+        background-color: transparent; width: 100%; max-width: 550px; aspect-ratio: 1 / 1; 
+        margin: 0 auto 30px auto; display: block; cursor: pointer; 
     }
     .flip-card-checkbox { display: none; }
     .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
-    
-    /* ✨ 關鍵魔法：當隱藏的 checkbox 被點擊勾選時，裡面的卡片就翻轉 180 度 */
     .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
     
     .flip-card-front, .flip-card-back { 
         position: absolute; width: 100%; height: 100%; backface-visibility: hidden; 
         display: flex; flex-direction: column; align-items: center; justify-content: center; 
-        border-radius: 20px; 
-        padding: 8%; /* ✨ 把固定的 px 改成 %，讓留白也跟著設備比例縮放 */
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; 
+        border-radius: 20px; padding: 8%; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; 
     }
     .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
-    .flip-card-back { background-color: #1e293b; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
     
-    /* ✨ 字體也升級成「動態縮放 (clamp)」，完美適應 iPad 螢幕 */
+    /* ✨ 升級：優化版質感咖啡紅背景 */
+    .flip-card-back { background-color: #6a2c2a; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
+    
     .fc-title { font-size: clamp(20px, 4vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
     .fc-content { font-size: clamp(16px, 3.5vw, 22px); line-height: 1.6; text-align: left; width: 100%; }
     </style>
@@ -147,7 +139,6 @@ QUIZ_POOL_FILE = os.path.join("data", "quiz_pool.json")
 
 @st.cache_resource
 def get_gsheet_client():
-    """建立與 Google Sheets 的安全連線"""
     try:
         info = st.secrets["GCP_SERVICE_ACCOUNT"]
         creds = Credentials.from_service_account_info(
@@ -159,7 +150,6 @@ def get_gsheet_client():
         return None
 
 def sync_cloud_data(worksheet_name, row_data):
-    """將單筆資料寫入雲端試算表"""
     client = get_gsheet_client()
     if not client: return
     try:
@@ -170,7 +160,6 @@ def sync_cloud_data(worksheet_name, row_data):
         st.error(f"❌ 雲端寫入失敗: {e}")
 
 def get_cloud_history():
-    """撈取全班的雲端戰報"""
     client = get_gsheet_client()
     if not client: return pd.DataFrame()
     try:
@@ -180,7 +169,6 @@ def get_cloud_history():
     except: return pd.DataFrame()
 
 def get_cloud_passwords():
-    """從雲端檢查學生密碼"""
     client = get_gsheet_client()
     if not client: return {}
     try:
@@ -195,7 +183,6 @@ def load_quiz_pool():
             with open(QUIZ_POOL_FILE, 'r', encoding='utf-8') as f: 
                 return json.load(f)
         except Exception as e:
-            st.error(f"🚨 【金庫損壞警報】quiz_pool.json 格式有錯！錯誤細節：{e}")
             return {}
     return {}
 
@@ -214,7 +201,6 @@ def load_local_db():
         else: return {"尚未載入賽程": "請確定資料庫檔案存在。"}
     except Exception as e: return {"讀取錯誤": f"錯誤: {str(e)}"}
 
-# ✨ 新增：載入學習卡資料庫
 @st.cache_data
 def load_flashcards_db():
     json_path = os.path.join("data", "flashcards_db.json")
@@ -231,43 +217,36 @@ FLASH_DB = load_flashcards_db()
 # ==========================================
 # --- 5. 狀態管理初始化 ---
 # ==========================================
-if "user_api_key" not in st.session_state: st.session_state.user_api_key = ""
-if "student_profile" not in st.session_state: 
-    st.session_state.student_profile = {"grade": "國八", "class": "1班", "seat": "01", "name": ""}
-if "app_phase" not in st.session_state: st.session_state.app_phase = "checkin"
-if "quiz_data" not in st.session_state: st.session_state.quiz_data = []
-if "user_ans" not in st.session_state: st.session_state.user_ans = {}
-if "ai_analysis" not in st.session_state: st.session_state.ai_analysis = None
-if "ai_guide" not in st.session_state: st.session_state.ai_guide = None
-
-if "attempt_tracker" not in st.session_state: st.session_state.attempt_tracker = {}
-if "current_episode" not in st.session_state: st.session_state.current_episode = list(SEASON_1_DB.keys())[0] if SEASON_1_DB else ""
-if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
-if "current_attempt_num" not in st.session_state: st.session_state.current_attempt_num = 1
-
-# 單題挑戰模式的專屬記憶體
-if "current_q_index" not in st.session_state: st.session_state.current_q_index = 0
-if "q_answered" not in st.session_state: st.session_state.q_answered = False
-
-# ✨ 新增：記錄目前看到第幾張學習卡
-if "card_index" not in st.session_state: st.session_state.card_index = 0
+states = [
+    "user_api_key", "student_profile", "app_phase", "quiz_data", "user_ans", 
+    "ai_analysis", "ai_guide", "attempt_tracker", "current_episode", "current_difficulty", 
+    "current_attempt_num", "current_q_index", "q_answered", "card_index", "class_analysis_report"
+]
+for s in states:
+    if s not in st.session_state:
+        if s == "student_profile": st.session_state[s] = {"grade": "國八", "class": "1班", "seat": "01", "name": ""}
+        elif s == "app_phase": st.session_state[s] = "checkin"
+        elif s == "user_ans": st.session_state[s] = {}
+        elif s == "attempt_tracker": st.session_state[s] = {}
+        elif s in ["current_q_index", "current_attempt_num", "card_index"]: st.session_state[s] = 0
+        elif s == "current_episode": st.session_state[s] = list(SEASON_1_DB.keys())[0] if SEASON_1_DB else ""
+        elif s == "current_difficulty": st.session_state[s] = "Level 1-基礎記憶"
+        else: st.session_state[s] = None
 
 if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. AI 雙核心引擎 (出題 & 診斷) ---
+# --- 6. AI 雙核心引擎 (出題、單人診斷、全班綜合分析) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
     
-    # ✨ 題庫隨機抽籤：如果題庫裡有 _pool 結尾的大題庫，直接抽 10 題
     pool_key = f"{episode_name}_{difficulty_key}_pool"
     if pool_key in pool and len(pool[pool_key]) >= 10:
         st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬 10 題！(免耗體力)")
         return random.sample(pool[pool_key], 10)
     
-    # 智能集數對照機：將「1局下半」對應到 JSON 裡的「第一集」
     episode_map = {
         "1": "第一集", "2": "第二集", "3": "第三集", "4": "第四集", "5": "第五集", 
         "6": "第六集", "7": "第七集", "8": "第八集", "9": "第九集", "10": "第十集"
@@ -331,7 +310,6 @@ def get_ai_report(player_name, score, mistakes, content):
         教材範圍：{content}
         
         請針對該球員的表現，精確生成以下兩個部分的 JSON (不要輸出 Markdown 標記，只要純 JSON)：
-        
         1. analysis (學習成效分析)：嚴格診斷學生「哪個觀念不對」或「哪裡需要加強」。語氣要像資深教練，指出他答錯的共同邏輯錯誤。絕對不要列出逐題解析。
         2. guide (研讀指南)：提供 3 點具體的「特訓建議」。指導他應該回去看講義的哪個部分，或如何練習。
         
@@ -357,6 +335,44 @@ def get_ai_report(player_name, score, mistakes, content):
         return analysis, guide
     except Exception as e: 
         return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
+
+# ✨ 新增：教練專屬的全班大數據綜合分析引擎
+def get_class_analysis(episode, history_df):
+    if not st.session_state.user_api_key: return "API金鑰無效"
+    try:
+        # 過濾出該單元的資料
+        if '單元' in history_df.columns:
+            df_ep = history_df[history_df['單元'] == episode]
+        else:
+            # 防呆：若雲端欄位名稱跑掉，用字串比對搜尋全表
+            df_ep = history_df[history_df.apply(lambda row: episode in str(row.values), axis=1)]
+        
+        if df_ep.empty:
+            return "⚠️ 目前雲端金庫中，尚無球員挑戰此單元的紀錄，無法進行戰情分析。"
+        
+        # 將全班資料轉為文字給 AI，限制長度防爆
+        data_str = df_ep.to_csv(index=False)
+        if len(data_str) > 15000: data_str = data_str[:15000] + "\n...(資料過長已截斷)"
+        
+        prompt = f"""
+        你現在是國中理化『總教練』的專屬 AI 首席分析師。
+        請針對【{episode}】這個單元，分析全班球員的綜合學習狀況。
+        
+        以下是全班近期的原始戰報大數據（包含每位球員的分數、AI給的個別診斷與指南）：
+        {data_str}
+        
+        請綜合以上所有數據，產出一份「全班綜合弱點分析與課堂複習策略」戰情報告。
+        要求規範：
+        1. 語氣專業、具敏銳洞察力，稱呼閱讀者為「教練」。
+        2. 從龐雜數據中，精準指出全班共同的「觀念盲區」或「最常犯的邏輯錯誤」。
+        3. 提供 2~3 點具體的「課堂複習建議」（例如教練下堂課可以特別加強講解哪個觀念，或設計什麼小活動）。
+        4. 必須使用 Markdown 豐富排版，有清晰的標題（使用 ### 等）和條列式說明。
+        """
+        model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"⚠️ 綜合戰情分析生成失敗: {e}"
 
 # ==========================================
 # --- 7. [介面路由] 球員報到 (雲端密碼校驗) ---
@@ -392,7 +408,7 @@ if st.session_state.app_phase == "checkin":
                 elif not clean_key: 
                     st.error("🚨 必須輸入 API 金鑰！")
                 else:
-                    cloud_pws = get_cloud_passwords() # 從雲端讀取密碼
+                    cloud_pws = get_cloud_passwords() 
                     student_id = f"{grade}_{cls}_{seat}" 
                     
                     if student_id in cloud_pws:
@@ -404,7 +420,6 @@ if st.session_state.app_phase == "checkin":
                             st.session_state.app_phase = "lobby" 
                             st.rerun()
                     else:
-                        # 首次登入，同步寫入雲端
                         sync_cloud_data("學生密碼", [student_id, student_pw])
                         st.toast("✅ 密碼已安全寫入雲端資料庫！")
                         st.session_state.user_api_key = clean_key
@@ -431,7 +446,7 @@ if st.session_state.app_phase == "checkin":
                     st.rerun()
 
 # ==========================================
-# --- 8. [介面路由] 賽季大廳 (雲端權限分流版) ---
+# --- 8. [介面路由] 賽季大廳 (雲端權限分流與戰情分析版) ---
 # ==========================================
 elif st.session_state.app_phase == "lobby":
     profile = st.session_state.student_profile
@@ -455,6 +470,31 @@ elif st.session_state.app_phase == "lobby":
                     file_name="化學大聯盟_全班戰報.csv",
                     mime="text/csv"
                 )
+                
+                st.write("---")
+                
+                # ✨ 新增：教練團專屬全班綜合戰情分析
+                st.markdown("### 🧠 教練團專屬：全班大數據綜合分析")
+                st.write("AI 首席分析師將根據上述所有球員的成績與個別診斷，為您統整出全班在特定單元的**共同盲點**與**下堂課的複習戰略**。")
+                
+                # 撈出有紀錄的單元清單供選擇
+                unique_eps = list(SEASON_1_DB.keys())
+                if '單元' in history_df.columns:
+                    recorded_eps = history_df['單元'].unique().tolist()
+                    unique_eps = [ep for ep in unique_eps if ep in recorded_eps] or unique_eps
+                
+                c_ep, c_btn = st.columns([2, 1])
+                with c_ep:
+                    analyze_ep = st.selectbox("📌 選擇要進行綜合分析的單元", unique_eps, label_visibility="collapsed")
+                with c_btn:
+                    if st.button("🚀 產出綜合分析報告", use_container_width=True, type="primary"):
+                        with st.spinner(f"正在深度運算 【{analyze_ep}】 的全班數據..."):
+                            st.session_state.class_analysis_report = get_class_analysis(analyze_ep, history_df)
+                
+                if st.session_state.class_analysis_report:
+                    st.write("<br>", unsafe_allow_html=True)
+                    st.info(f"**🎯 【{analyze_ep}】 戰情分析報告**")
+                    st.markdown(st.session_state.class_analysis_report)
             else:
                 st.info("目前尚無任何球員挑戰資料。")
             
@@ -494,17 +534,16 @@ elif st.session_state.app_phase == "lobby":
                 st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
                 st.session_state.quiz_data = [] 
                 
-                # 記憶體重置
                 st.session_state.current_q_index = 0
                 st.session_state.q_answered = False
                 st.session_state.user_ans = {}
-                st.session_state.card_index = 0 # 學習卡回歸第一張
+                st.session_state.card_index = 0 
                 
                 st.session_state.app_phase = "quiz"
                 st.rerun()
 
 # ==========================================
-# --- 9. [介面路由] 測驗系統 (單題沉浸模式 + 黃金切版) ---
+# --- 9. [介面路由] 測驗系統 (單題沉浸模式 + 1:1切版) ---
 # ==========================================
 elif st.session_state.app_phase == "quiz":
     ep_name = st.session_state.current_episode
@@ -514,7 +553,6 @@ elif st.session_state.app_phase == "quiz":
     st.markdown(f"## ✍️ {ep_name} [{diff_name}] - 第 {attempt_num} 次挑戰")
     st.write("---")
     
-    # ✨ 黃金切版：左邊比例 1 (講義)，右邊比例 1 (卡片+單題測驗) - 完美吃滿版面
     col_lecture, col_main = st.columns([1, 1], gap="large")
     
     with col_lecture:
@@ -522,7 +560,6 @@ elif st.session_state.app_phase == "quiz":
         st.markdown(SEASON_1_DB.get(ep_name, "讀取失敗"))
         
     with col_main:
-        # --- 區塊 A：學習卡 ---
         cards = FLASH_DB.get(ep_name, [])
         if cards:
             st.markdown("### 🃏 賽前快速記憶")
@@ -557,7 +594,6 @@ elif st.session_state.app_phase == "quiz":
                     st.rerun()
             st.write("<br>", unsafe_allow_html=True)
 
-        # --- 區塊 B：實戰測驗 (保留你的單題沉浸模式) ---
         st.markdown("### ✍️ 實戰測試")
         if not st.session_state.quiz_data:
             with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
@@ -659,7 +695,6 @@ elif st.session_state.app_phase == "dashboard":
                 st.session_state.ai_analysis = analysis
                 st.session_state.ai_guide = guide
                 
-                # ✨ 關鍵：分析完畢後，把成績跟診斷結果存入 Google Sheets 雲端金庫！
                 now_time = datetime.now().strftime("%Y-%m-%d %H:%M")
                 sync_cloud_data("學習戰報", [now_time, profile['grade'], profile['class'], profile['seat'], profile['name'], st.session_state.current_episode, f"{correct_count}/{total_q}", analysis, guide])
                 
