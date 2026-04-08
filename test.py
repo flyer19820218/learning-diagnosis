@@ -157,6 +157,10 @@ if "current_episode" not in st.session_state: st.session_state.current_episode =
 if "current_difficulty" not in st.session_state: st.session_state.current_difficulty = "Level 1-基礎記憶"
 if "current_attempt_num" not in st.session_state: st.session_state.current_attempt_num = 1
 
+# ✨ 新增：單題挑戰模式的專屬記憶體
+if "current_q_index" not in st.session_state: st.session_state.current_q_index = 0
+if "q_answered" not in st.session_state: st.session_state.q_answered = False
+
 if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
@@ -392,29 +396,17 @@ elif st.session_state.app_phase == "lobby":
                 st.session_state.current_difficulty = selected_diff
                 st.session_state.current_attempt_num = st.session_state.attempt_tracker[track_key]
                 st.session_state.quiz_data = [] 
+                
+                # ✨ 新增：上場前要把題號歸零，並清除之前的作答紀錄
+                st.session_state.current_q_index = 0
+                st.session_state.q_answered = False
+                st.session_state.user_ans = {}
+                
                 st.session_state.app_phase = "quiz"
                 st.rerun()
-                
-            if st.button("🔌 離開球場 (登出)", use_container_width=True):
-                st.session_state.clear()
-                st.rerun()
-            
-            st.write("<br><br>", unsafe_allow_html=True)
-            with st.expander("📚 我的學習歷程 (個人雲端戰報)"):
-                df = get_cloud_history()
-                if not df.empty:
-                    my_df = df[(df['年級'].astype(str) == str(profile['grade'])) & 
-                               (df['班級'].astype(str) == str(profile['class'])) & 
-                               (df['座號'].astype(str) == str(profile['seat']))]
-                    if not my_df.empty:
-                        st.dataframe(my_df[['時間', '單元', '分數', '觀念診斷']], use_container_width=True)
-                    else:
-                        st.info("你還沒有任何挑戰紀錄喔！趕快去 Play Ball 吧！")
-                else:
-                    st.info("雲端目前尚無紀錄！")
 
 # ==========================================
-# --- 9. [介面路由] 測驗系統 ---
+# --- 9. [介面路由] 測驗系統 (單題沉浸模式) ---
 # ==========================================
 elif st.session_state.app_phase == "quiz":
     ep_name = st.session_state.current_episode
@@ -423,10 +415,12 @@ elif st.session_state.app_phase == "quiz":
     
     st.markdown(f"## ✍️ {ep_name} [{diff_name}] - 第 {attempt_num} 次挑戰")
     st.write("---")
+    
     col_l, col_r = st.columns([1, 1.5], gap="large")
     with col_l:
         st.info("📖 戰術板 (講義複習)") 
         st.markdown(SEASON_1_DB.get(ep_name, "讀取失敗"))
+        
     with col_r:
         if not st.session_state.quiz_data:
             with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
@@ -434,18 +428,52 @@ elif st.session_state.app_phase == "quiz":
                 st.rerun()
                 
         if st.session_state.quiz_data:
-            with st.form("quiz_form"):
-                for i, q in enumerate(st.session_state.quiz_data):
-                    if isinstance(q, dict) and 'q' in q:
-                        st.markdown(f"**Q{i+1}: {q['q']}**")
-                        opts = q.get('options', ["A", "B", "C", "D"])
-                        st.session_state.user_ans[i] = st.radio(f"Q{i}_options", opts, key=f"q_{i}", label_visibility="collapsed")
-                    else:
-                        st.error(f"⚠️ 第 {i+1} 題資料格式不完全，請嘗試回到大廳再次進入。")
-                    st.write("---")
-                if st.form_submit_button("🏁 提交看分析"):
-                    st.session_state.app_phase = "dashboard"
-                    st.rerun()
+            total_q = len(st.session_state.quiz_data)
+            curr_idx = st.session_state.current_q_index
+            q = st.session_state.quiz_data[curr_idx]
+            
+            # 顯示進度條
+            st.progress((curr_idx) / total_q, text=f"進度：第 {curr_idx + 1} 題 / 共 {total_q} 題")
+            
+            st.markdown(f"**Q{curr_idx + 1}: {q.get('q', '題目遺失')}**")
+            opts = q.get('options', ["A", "B", "C", "D"])
+            
+            # 如果還沒作答 -> 顯示表單讓學生選
+            if not st.session_state.q_answered:
+                with st.form(f"q_form_{curr_idx}"):
+                    choice = st.radio("請選擇答案：", opts, label_visibility="collapsed")
+                    if st.form_submit_button("揮棒！(送出答案)", type="primary", use_container_width=True):
+                        st.session_state.user_ans[curr_idx] = choice
+                        st.session_state.q_answered = True
+                        st.rerun()
+            
+            # 如果已經作答 -> 鎖定答案，給出即時回饋與下一題按鈕
+            else:
+                st.radio("你的選擇：", opts, index=opts.index(st.session_state.user_ans[curr_idx]), disabled=True, label_visibility="collapsed")
+                
+                ans_letter = q.get('ans', '').strip()
+                user_choice = st.session_state.user_ans[curr_idx]
+                
+                st.write("---")
+                if user_choice.startswith(ans_letter):
+                    st.success(f"🎉 漂亮的好球！正確答案是 {ans_letter}。")
+                else:
+                    st.error(f"💥 揮棒落空！正確答案是 {ans_letter}。")
+                
+                st.info(f"💡 教練即時解析：\n\n{q.get('diag', '無')}")
+                
+                st.write("<br>", unsafe_allow_html=True)
+                
+                # 判斷要顯示「下一題」還是「看結算戰報」
+                if curr_idx < total_q - 1:
+                    if st.button("👉 下一題", type="primary", use_container_width=True):
+                        st.session_state.current_q_index += 1
+                        st.session_state.q_answered = False
+                        st.rerun()
+                else:
+                    if st.button("🏁 完成測驗，看結算戰報！", type="primary", use_container_width=True):
+                        st.session_state.app_phase = "dashboard"
+                        st.rerun()
 
 # ==========================================
 # --- 10. [介面路由] 學習儀表板 ---
