@@ -39,10 +39,33 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: clamp(18px, 1.5vw, 22px) !important; line-height: 1.8; }
     div[role="radiogroup"] label p { font-size: clamp(18px, 1.5vw, 22px) !important; }
     
-    /* 🃏 3D 翻轉卡片 CSS (統一改為「點擊翻面」) */
-    .flip-card { background-color: transparent; width: 100%; height: 300px; perspective: 1000px; margin-bottom: 20px; display: block; cursor: pointer; }
-    .flip-card-checkbox { display: none; } /* 隱藏用來記錄點擊狀態的開關 */
+    /* 🃏 3D 翻轉卡片 CSS (專為 iPad/手機 打造的 1:1 完美正方形) */
+    .flip-card { 
+        background-color: transparent; 
+        width: 100%; 
+        max-width: 400px; /* ✨ 防禦機制：在電腦大螢幕上最多長到 400px，不會變成巨無霸 */
+        aspect-ratio: 1 / 1; /* ✨ 核心魔法：捨棄固定的 height，強制長寬比永遠 1:1！ */
+        margin: 0 auto 20px auto; /* ✨ 讓正方形卡片在欄位中永遠「置中對齊」 */
+        display: block; 
+        cursor: pointer; 
+    }
+    .flip-card-checkbox { display: none; }
     .flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s; transform-style: preserve-3d; }
+    .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
+    
+    .flip-card-front, .flip-card-back { 
+        position: absolute; width: 100%; height: 100%; backface-visibility: hidden; 
+        display: flex; flex-direction: column; align-items: center; justify-content: center; 
+        border-radius: 20px; 
+        padding: 8%; /* ✨ 把固定的 px 改成 %，讓留白也跟著設備比例縮放 */
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; 
+    }
+    .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
+    .flip-card-back { background-color: #1e293b; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
+    
+    /* ✨ 字體也升級成「動態縮放 (clamp)」，完美適應 iPad 螢幕 */
+    .fc-title { font-size: clamp(20px, 4vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
+    .fc-content { font-size: clamp(16px, 3.5vw, 22px); line-height: 1.6; text-align: left; width: 100%; }
     
     /* ✨ 關鍵魔法：當隱藏的 checkbox 被點擊勾選時，裡面的卡片就翻轉 180 度 */
     .flip-card-checkbox:checked + .flip-card-inner { transform: rotateY(180deg); }
