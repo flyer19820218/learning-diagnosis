@@ -308,13 +308,13 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. 核心引擎 (AI 出題與診斷) ---
+# --- 6. 核心引擎 ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
     pool_key = f"{episode_name}_{difficulty_key}_pool"
     if pool_key in pool and len(pool[pool_key]) >= 10:
-        st.toast(f"🎲 啟隨機題庫：從大題庫為你抽出專屬考卷！")
+        st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬考卷！")
         return random.sample(pool[pool_key], 10)
     
     episode_map = {
@@ -406,7 +406,7 @@ def get_class_analysis(episode, target_class, history_df):
         return f"⚠️ 綜合戰情分析生成失敗: {e}"
 
 # ==========================================
-# --- 7. [介面路由] 球員報到 (重新排版隱藏 VIP) ---
+# --- 7. [介面路由] 球員報到 ---
 # ==========================================
 if st.session_state.app_phase == "checkin":
     st.write("<br><br>", unsafe_allow_html=True)
@@ -415,7 +415,6 @@ if st.session_state.app_phase == "checkin":
         st.markdown("<h1 style='text-align: center; margin-bottom: 0;'>⚾ 化學大聯盟</h1>", unsafe_allow_html=True)
         st.write("---")
         
-        # ✨ 更新分頁順序：一般報到 -> 教練後台 -> 801隱藏通道
         tab1, tab2, tab3 = st.tabs(["🧑‍🎓 一般球員報到", "🛡️ 教練專屬通道", "🌟 801 專屬通道"])
         
         # --- TAB 1: 一般球員報到 ---
@@ -510,7 +509,6 @@ if st.session_state.app_phase == "checkin":
 
         # --- TAB 3: 801 專屬隱藏通道 ---
         with tab3:
-            # ✨ 加上煙霧彈標題
             st.markdown("#### 🚀 801 班專屬快速通關 (尚未開通)")
             c_seat, c_name = st.columns(2)
             with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 32)], key="seat_801")
@@ -717,8 +715,8 @@ elif st.session_state.app_phase == "quiz":
             idx = st.session_state.card_index
             current_card = cards[idx]
             
-            # ✨ 神級修復：給 input 加上獨一無二的 id (包含單元名與進度)，強迫瀏覽器重置翻面狀態！
-           st.markdown(f"""
+            # ✨ 神級修復：給 input 加上獨一無二的 id，強迫瀏覽器重置翻面狀態！
+            st.markdown(f"""
                 <label class="flip-card">
                     <input type="checkbox" class="flip-card-checkbox" id="card_toggle_{ep_name}_{idx}">
                     <div class="flip-card-inner">
