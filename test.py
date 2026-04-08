@@ -53,7 +53,7 @@ components.html(
 )
 
 # ==========================================
-# --- 2. 核心設定 (CSS 視覺巔峰版 + 學習卡特效 + 咖啡紅背面) ---
+# --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 全域字體統一響應式放大 + 學習卡特效) ---
 # ==========================================
 st.markdown("""
     <style>
@@ -62,7 +62,7 @@ st.markdown("""
         font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     }
     
-    /* 讓 Streamlit 突破預設寬度，98% 吃滿整個螢幕 */
+    /* ✨ 讓 Streamlit 突破預設寬度，98% 吃滿整個螢幕 */
     .block-container { max-width: 98% !important; padding-top: 2rem !important; padding-bottom: 2rem !important; }
 
     .stat-box { background-color: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; }
@@ -99,8 +99,6 @@ st.markdown("""
         border-radius: 20px; padding: 8%; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; 
     }
     .flip-card-front { background-color: #ffffff; color: #1e293b; border-top: 8px solid #3b82f6; }
-    
-    /* ✨ 升級：優化版質感咖啡紅背景 */
     .flip-card-back { background-color: #6a2c2a; color: #f8fafc; transform: rotateY(180deg); overflow-y: auto; }
     
     .fc-title { font-size: clamp(20px, 4vw, 28px); font-weight: bold; line-height: 1.4; margin-bottom: 10px; }
@@ -128,7 +126,7 @@ DIFFICULTY_LEVELS = {
 }
 
 FALLBACK_QUIZ = [
-    {"topic": "系統防護", "q": "目前 API 額度過載或金庫毀損，這是備用題。電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
+    {"topic": "系統防護", "q": "教練尚未在金庫放入這份考卷。這是備用題：電解質必定溶於水嗎？", "options": ["A. 是", "B. 否"], "ans": "A", "diag": "電解質定義要件之一：溶於水。"}
 ]
 
 # ==========================================
@@ -237,16 +235,18 @@ if st.session_state.user_api_key:
     genai.configure(api_key=st.session_state.user_api_key)
 
 # ==========================================
-# --- 6. AI 雙核心引擎 (出題、單人診斷、全班綜合分析) ---
+# --- 6. 核心引擎 (拔除 AI 出題，保留 AI 診斷分析) ---
 # ==========================================
 def get_quiz_data(episode_name, difficulty_key, attempt_num):
     pool = load_quiz_pool()
     
+    # 找大題庫抽籤
     pool_key = f"{episode_name}_{difficulty_key}_pool"
     if pool_key in pool and len(pool[pool_key]) >= 10:
-        st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬 10 題！(免耗體力)")
+        st.toast(f"🎲 啟動隨機題庫：從大題庫為你抽出專屬考卷！")
         return random.sample(pool[pool_key], 10)
     
+    # 找對應版本的考卷
     episode_map = {
         "1": "第一集", "2": "第二集", "3": "第三集", "4": "第四集", "5": "第五集", 
         "6": "第六集", "7": "第七集", "8": "第八集", "9": "第九集", "10": "第十集"
@@ -259,45 +259,12 @@ def get_quiz_data(episode_name, difficulty_key, attempt_num):
         prefix = episode_map[ep_num]
         for p_key in pool.keys():
             if p_key.startswith(prefix) and difficulty_key in p_key and f"v{attempt_num}" in p_key:
-                st.toast("⚡ 瞬間從金庫抽出考卷！未消耗 API 體力")
+                st.toast("⚡ 瞬間從金庫抽出考卷！")
                 return pool[p_key]
                 
-    if not st.session_state.user_api_key: return FALLBACK_QUIZ
-    
-    st.toast(f"🤖 金庫找不到這份考卷，被迫呼叫 AI 現場出題 (版本 v{attempt_num})...")
-    model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
-    course_content = SEASON_1_DB.get(episode_name, "")
-    diff_prompt = DIFFICULTY_LEVELS.get(difficulty_key, "")
-    
-    prompt = f"""
-    請生成 10 題單選題。單元：{episode_name}。難度：{diff_prompt}。教材：{course_content}。
-    這是學生的第 {attempt_num} 次挑戰，請盡量出與之前不同切入點的題目。
-    
-    🚨【極度重要：嚴格 JSON 格式】🚨
-    你輸出的內容必須是純 JSON 陣列，絕對不能包含其他文字或 Markdown 標記。
-    每一題的字典必須完全符合以下 Key 值：
-    [
-      {{
-        "topic": "知識點名稱",
-        "q": "題目敘述",
-        "options": ["A. 選項1", "B. 選項2", "C. 選項3", "D. 選項4"],
-        "ans": "A",
-        "diag": "詳解說明"
-      }}
-    ]
-    """
-    try:
-        response = model.generate_content(prompt)
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        quiz_json = json.loads(clean_text)
-        
-        if isinstance(quiz_json, list) and len(quiz_json) > 0 and 'q' in quiz_json[0]:
-            cache_key = f"{episode_name}_{difficulty_key}_v{attempt_num}"
-            pool[cache_key] = quiz_json
-            save_quiz_pool(pool)
-            return quiz_json
-        return FALLBACK_QUIZ
-    except Exception: return FALLBACK_QUIZ
+    # 🚨 AI 出題引擎已拔除！找不到題目時直接回報警告
+    st.error(f"⚠️ 金庫裡目前沒有【{episode_name} - {difficulty_key}】的題目喔！請通知教練。")
+    return FALLBACK_QUIZ
 
 def get_ai_report(player_name, score, mistakes, content):
     if not st.session_state.user_api_key: return "API金鑰無效", "請檢查金鑰"
@@ -336,21 +303,17 @@ def get_ai_report(player_name, score, mistakes, content):
     except Exception as e: 
         return f"⚠️ 診斷暫時中斷: {e}", "請稍後再試或重新點擊分析。"
 
-# ✨ 新增：教練專屬的全班大數據綜合分析引擎
 def get_class_analysis(episode, history_df):
     if not st.session_state.user_api_key: return "API金鑰無效"
     try:
-        # 過濾出該單元的資料
         if '單元' in history_df.columns:
             df_ep = history_df[history_df['單元'] == episode]
         else:
-            # 防呆：若雲端欄位名稱跑掉，用字串比對搜尋全表
             df_ep = history_df[history_df.apply(lambda row: episode in str(row.values), axis=1)]
         
         if df_ep.empty:
             return "⚠️ 目前雲端金庫中，尚無球員挑戰此單元的紀錄，無法進行戰情分析。"
         
-        # 將全班資料轉為文字給 AI，限制長度防爆
         data_str = df_ep.to_csv(index=False)
         if len(data_str) > 15000: data_str = data_str[:15000] + "\n...(資料過長已截斷)"
         
@@ -473,11 +436,9 @@ elif st.session_state.app_phase == "lobby":
                 
                 st.write("---")
                 
-                # ✨ 新增：教練團專屬全班綜合戰情分析
                 st.markdown("### 🧠 教練團專屬：全班大數據綜合分析")
                 st.write("AI 首席分析師將根據上述所有球員的成績與個別診斷，為您統整出全班在特定單元的**共同盲點**與**下堂課的複習戰略**。")
                 
-                # 撈出有紀錄的單元清單供選擇
                 unique_eps = list(SEASON_1_DB.keys())
                 if '單元' in history_df.columns:
                     recorded_eps = history_df['單元'].unique().tolist()
@@ -596,7 +557,7 @@ elif st.session_state.app_phase == "quiz":
 
         st.markdown("### ✍️ 實戰測試")
         if not st.session_state.quiz_data:
-            with st.spinner(f"🤖 教練準備第 {attempt_num} 份專屬考卷中..."):
+            with st.spinner(f"🤖 正在從金庫抽取考卷..."):
                 st.session_state.quiz_data = get_quiz_data(ep_name, diff_name, attempt_num)
                 st.rerun()
                 
