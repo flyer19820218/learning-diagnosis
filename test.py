@@ -542,7 +542,7 @@ if st.session_state.app_phase == "checkin":
         with tab3:
             st.markdown("#### 🚀 801 班專屬快速通關 (尚未開通)")
             c_seat, c_name = st.columns(2)
-            with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 32)], key="seat_801")
+            with c_seat: seat_801 = st.selectbox("選擇座號", [str(i).zfill(2) for i in range(1, 38)], key="seat_801")
             with c_name: name_801 = st.text_input("姓名 (選填)", key="name_801")
             
             st.write("<br>", unsafe_allow_html=True)
