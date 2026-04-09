@@ -57,6 +57,38 @@ components.html(
     width=0
 )
 
+# ✨ 注入 MathJax 系統 (老闆你要的 LaTeX 引擎，完美安插在這裡！)
+components.html(
+    """
+    <script>
+    const parentDoc = window.parent.document;
+    if (!parentDoc.getElementById('mathjax-script')) {
+        const configScript = parentDoc.createElement('script');
+        configScript.innerHTML = `
+            window.MathJax = {
+                tex: { inlineMath: [['$', '$'], ['\\\\(', '\\\\)']] },
+                startup: { typeset: false }
+            };
+        `;
+        parentDoc.head.appendChild(configScript);
+
+        const script = parentDoc.createElement('script');
+        script.id = 'mathjax-script';
+        script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+        script.async = true;
+        script.onload = () => { if (window.parent.MathJax) window.parent.MathJax.typesetPromise(); };
+        parentDoc.head.appendChild(script);
+    } else {
+        if (window.parent.MathJax && window.parent.MathJax.typesetPromise) {
+            window.parent.MathJax.typesetPromise();
+        }
+    }
+    </script>
+    """,
+    height=0,
+    width=0
+)
+
 # ==========================================
 # --- 2. 核心設定 (CSS 視覺巔峰版復刻 + 學習卡特效) ---
 # ==========================================
@@ -404,7 +436,6 @@ def get_class_analysis(episode, target_class, history_df):
         return response.text
     except Exception as e:
         return f"⚠️ 綜合戰情分析生成失敗: {e}"
-
 # ==========================================
 # --- 7. [介面路由] 球員報到 ---
 # ==========================================
