@@ -1,27 +1,54 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" style="color-scheme: light;">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
+  <title>學習診斷系統</title>
+  
+  <meta name="apple-mobile-web-app-title" content="學習診斷">
+  <meta name="application-name" content="學習診斷">
+
+  <link rel="apple-touch-icon" href="diagnosis.png?v=5">
+  <link rel="icon" sizes="192x192" href="diagnosis.png?v=5">
+  <link rel="shortcut icon" href="diagnosis.png?v=5">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  
+  <style>
+    /* 核心重置，不給 iOS 任何延伸空間 */
+    html, body { 
+      margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; 
+      background-color: #FFFFFF; font-family: sans-serif;
+      -webkit-text-size-adjust: 100%; 
+    }
     
-    <meta name="apple-mobile-web-app-title" content="學習診斷">
-    <meta name="application-name" content="學習診斷">
-
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-
-    <link rel="apple-touch-icon" href="diagnosis.png">
-    <link rel="icon" sizes="192x192" href="diagnosis.png">
-    <link rel="shortcut icon" href="diagnosis.png">
-
-    <title>學習診斷系統</title>
+    /* 建立一個絕對固定的外框 */
+    .iframe-wrapper {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      width: 100vw; height: 100vh; overflow: hidden;
+      -webkit-overflow-scrolling: touch; 
+    }
+    
+    /* 強制 iframe 填滿外框，減去底部 25px 遮蔽條的高度 */
+    iframe { 
+      position: absolute; top: 0; left: 0;
+      width: 100vw; height: calc(100vh - 25px); 
+      border: none; margin: 0; padding: 0;
+    }
+    
+    /* 遮蔽氣球的終點線 (蓋掉 Streamlit 水印) */
+    .dummy-footer {
+      position: fixed; bottom: 0; left: 0; width: 100vw; height: 25px; 
+      background-color: #FFFFFF; z-index: 9999; border-top: 1px solid #e7ebf3; 
+    }
+  </style>
 </head>
 <body>
-    <script>
-        // 🚨 請把下面的網址換成您真實的 Streamlit 網址 🚨
-        const targetUrl = "https://learning-diagnosis-test.streamlit.app/";
-        window.location.replace(targetUrl);
-    </script>
+  <div class="iframe-wrapper">
+    <iframe src="https://learning-diagnosis-test.streamlit.app/?embed=true" scrolling="yes"></iframe>
+  </div>
+  <div class="dummy-footer"></div>
 </body>
 </html>
