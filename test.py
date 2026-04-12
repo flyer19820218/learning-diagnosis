@@ -147,11 +147,10 @@ st.markdown("""
 MODEL_ID = "gemini-2.5-flash"
 
 SYSTEM_INSTRUCTION = """
-你現在是『教學 AI 設計』。在生成題目、解析、教練回饋時，必須嚴格遵守以下規範：
-1. 教學內容為台灣地區繁體中文，針對國中學生。
-2. 文字顯示必須使用 Markdown 語法排版。化學式請務必使用標準符號（如 $H_2SO_4$）。
-3. 扮演曉臻助教或給予提示時，改用加強語氣的肯定句。
-4. 解釋化學觀念時必須 100% 保持理化老師的科學嚴謹與準確性。
+你現在是『化學大聯盟』的最高戰略教練。在給予回饋時，必須嚴格遵守以下「漸進式引導模式」規範：
+1. 核心哲學：絕不直接給死板解答！必須強迫學生啟動「思想實驗 (Gedankenexperiment)」與腦內建模。
+2. 文字顯示必須使用 Markdown 語法排版，化學式請務必使用標準符號（如 $H_2SO_4$）。
+3. 語氣要像資深教練，用加強語氣的肯定句，引導學生自行爬升。
 """
 
 DIFFICULTY_LEVELS = {
@@ -370,18 +369,26 @@ def get_ai_report(player_name, score, mistakes, content):
     if not st.session_state.user_api_key: return "API金鑰無效", "請檢查金鑰"
     try:
         model = genai.GenerativeModel(MODEL_ID, system_instruction=SYSTEM_INSTRUCTION)
+        
+        # 👇 這裡換上最新的 4 Level 鷹架引導魔法 👇
         prompt = f"""
         球員：{player_name}
         得分：{score}
         錯題清單：{mistakes}
         教材範圍：{content}
         
-        請針對該球員的表現，精確生成以下兩個部分的 JSON (不要輸出 Markdown 標記，只要純 JSON)：
-        1. analysis (學習成效分析)：嚴格診斷學生「哪個觀念不對」或「哪裡需要加強」。語氣要像資深教練。
-        2. guide (研讀指南)：提供 3 點具體的「特訓建議」。
+        請拒絕直接給出標準答案。針對該球員的錯題，採用「漸進式引導模式 (Scaffolding)」產出以下兩個部分的 JSON (只要純 JSON)：
+        
+        1. analysis (對應 UI 的「觀念診斷」卡片)：
+           - 【Level 1 先備知識喚醒】：提醒這題錯題相關的核心公式或基本定義。
+           - 【Level 2 思想實驗引導】：用口語化、具體的生活場景，引導學生在腦中模擬這個物理/化學現象（例如：「閉上眼睛想像一下...」）。
+           
+        2. guide (對應 UI 的「研讀指南」卡片)：
+           - 【Level 3 致命迷思破解】：一針見血點出該題型最常騙到學生的陷阱。
+           - 【Level 4 終極救援】：給予最後的思考收斂，並強烈建議學生：「立刻去聽本週《黎明韓流》Podcast 對應單元，教練有在裡面講解答密碼！」
         
         輸出格式：
-        {{ "analysis": "觀念診斷內容...", "guide": "具體建議內容..." }}
+        {{ "analysis": "包含 Level 1 與 Level 2 的 Markdown 內容", "guide": "包含 Level 3 與 Level 4 的 Markdown 內容" }}
         """
         response = model.generate_content(prompt)
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
