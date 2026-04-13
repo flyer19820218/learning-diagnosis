@@ -20,43 +20,6 @@ st.set_page_config(page_title="化學大聯盟：雲端診斷系統", page_icon=
 # 系統會自動從 Streamlit 後台的 Secrets 金庫讀取金鑰，不怕外洩！
 TEACHER_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
-# ✨ 注入全螢幕懸浮按鈕黑魔法
-components.html(
-    """
-    <script>
-    if (!window.parent.document.getElementById('fullscreen-btn')) {
-        const btnHtml = '<div id="fullscreen-btn" style="position:fixed; bottom:30px; right:30px; background-color:#3b82f6; color:white; padding:15px 25px; border-radius:50px; cursor:pointer; z-index:999999; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); font-family:sans-serif; font-size:18px; font-weight:bold; transition:all 0.3s; display:flex; align-items:center; gap:8px;">🔲 進入全螢幕</div>';
-        window.parent.document.body.insertAdjacentHTML('beforeend', btnHtml);
-        
-        window.parent.document.getElementById('fullscreen-btn').addEventListener('click', function() {
-            var doc = window.parent.document;
-            var docEl = doc.documentElement;
-            var requestFullScreen = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-            var cancelFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
-
-            if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement) {
-                if (requestFullScreen) {
-                    requestFullScreen.call(docEl);
-                    this.innerHTML = '🔳 退出全螢幕';
-                    this.style.backgroundColor = '#0f172a';
-                } else {
-                    alert("您的裝置不支援全螢幕喔！(iPhone Safari 預設不支援，請使用 iPad)");
-                }
-            } else {
-                if (cancelFullScreen) {
-                    cancelFullScreen.call(doc);
-                    this.innerHTML = '🔲 進入全螢幕';
-                    this.style.backgroundColor = '#3b82f6';
-                }
-            }
-        });
-    }
-    </script>
-    """,
-    height=0,
-    width=0
-)
-
 # ✨ 注入 MathJax 系統 (老闆你要的 LaTeX 引擎，完美安插在這裡！)
 components.html(
     """
