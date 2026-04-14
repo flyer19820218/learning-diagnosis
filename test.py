@@ -59,7 +59,7 @@ st.markdown("""
         <div style="font-size: 80px; margin-bottom: 15px; animation: bounce 2s infinite;">🚀</div>
         <div class="move-title">化學大聯盟・全新總部已啟用</div>
         <div class="move-text">
-            各位球員請注意！教練已經為大家打造了更聰明、更快速的全新雲端診斷系統。<br>
+            各位球員請注意！為了和化學大聯盟-podcasts連結<br>
             請立即點擊下方按鈕，前往新基地報到！
         </div>
         <a href="https://scienceisveryeasy-diag.streamlit.app/" class="btn-link">👉 點此進入全新診斷系統</a>
